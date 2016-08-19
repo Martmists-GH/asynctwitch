@@ -5,6 +5,7 @@ __pycache__/
 *.pypirc
 # C extensions
 *.so
+bot.py
 
 # Distribution / packaging
 .Python

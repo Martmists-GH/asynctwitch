@@ -30,12 +30,12 @@ class Command:
 		self.listed = listed
 		self.unprefixed = unprefixed
 		self.isParent = isParent
-		if self.isParent:
-			self.subcomms = []
 		bot.commands.append(self)
 	#
 	
-	def subcommand(self, *args, **kwargs)
+	def subcommand(self, *args, **kwargs):
+		if not hasattr(self, 'subcommands'):
+			self.subcommands = []
 		return SubCommand(self, *args, **kwargs)
 	
 	def __call__(self, func):
@@ -78,14 +78,23 @@ class Command:
 					
 			args[x] = v
 			
-		await self.func(message, *args)
+		if hasattr(self, 'subcommands'):
+			subcomm = args.pop(0)
+			
+			for s in self.subcommands:
+				if subcomm == s.comm:
+					await s.run(message, *args)
+					break
+					
+		else:
+			await self.func(message, *args)
 	#
 
 	
 class SubCommand:
-	def __init__(self, bot, parent, comm, *, desc=''):
+	def __init__(self, parent, comm, *, desc=''):
 		self.comm = comm
-		self.parent = [c for c in bot.commands if c.comm==parent][0]
+		self.parent = parent
 		self.parent.subcomms.append(self)
 	#
 	
