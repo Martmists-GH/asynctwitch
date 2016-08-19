@@ -32,14 +32,21 @@ bot = asynctwitch.CommandBot(
 async def example(message, word1:str, number1:int, rest:str):
 	bot.say('wow')
 
-
-
-@bot.command('ping', alias=['pingme', 'alias2'], desc='ping command')
-async def ping(message):
-	message.reply("Pong!")
+# Example subcommand:
+@bot.command('say')
+async def say(m, subcommand:str):
+	pass
+	
+c = bot.get_command('say') # I suck at programming pls help
+@c.subcommand('this')
+async def this(m):
+	bot.say("that:)
 
 bot.start()	
 ```
+
+
+
 
 It's also possible to handle messages your own way, just use
 

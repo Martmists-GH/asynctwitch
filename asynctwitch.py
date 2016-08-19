@@ -7,10 +7,13 @@ import inspect
 
 
 class CommandError(Exception):
+	""" custom exception yay """
 	pass
 	
 	
 class Message:
+	""" custom message object to combine message and author and to add easy reply """
+	
 	def __init__(self, m, a, bot):
 		self.content = m
 		self.author = a
@@ -22,6 +25,9 @@ class Message:
 	#
 	
 class Command:
+	
+	""" using classes as decorators because idfk im drunk or smth """
+	
 	def __init__(self, bot, comm, *, alias=[], desc='', admin=False, unprefixed=False, listed=True):
 		self.comm = comm
 		self.desc = desc
@@ -29,22 +35,26 @@ class Command:
 		self.admin = admin
 		self.listed = listed
 		self.unprefixed = unprefixed
-		self.isParent = isParent
 		bot.commands.append(self)
 	#
 	
 	def subcommand(self, *args, **kwargs):
+		""" create subcommands """
 		if not hasattr(self, 'subcommands'):
 			self.subcommands = []
 		return SubCommand(self, *args, **kwargs)
 	
 	def __call__(self, func):
+		""" because decorators """
+		
 		self.func = func
 		print("Added command: " + self.comm)
 		return func
 	#
 	
 	async def run(self, message):
+		""" I shouldn't be writing docstrings at midnight """
+	
 		args = message.content.split(" ")
 		del args[0]
 		
@@ -92,10 +102,12 @@ class Command:
 
 	
 class SubCommand:
+	""" obvious name is obvious """
+	
 	def __init__(self, parent, comm, *, desc=''):
 		self.comm = comm
 		self.parent = parent
-		self.parent.subcomms.append(self)
+		self.parent.subcommands.append(self)
 	#
 	
 	def __call__(self, func):
@@ -105,6 +117,8 @@ class SubCommand:
 	#
 	
 	async def run(self, message):
+		""" run subcommand """
+	
 		args = message.content.split(" ")
 		del args[0]
 		del args[1]
@@ -144,6 +158,8 @@ class SubCommand:
 	
 	
 class Bot:
+	""" bot class without command support """
+	
 	def __init__(self, *, oauth=None, user=None, channel='#twitch', prefix='!', admins=[]):
 		sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding=sys.stdout.encoding, errors="backslashreplace", line_buffering=True)
 		self.prefix = prefix
@@ -161,6 +177,8 @@ class Bot:
 		setattr(self, func.__name__, func)
 	
 	def start(self):
+		""" start the bot """
+		
 		self.loop.run_until_complete(self._tcp_echo_client())
 	#
 	
@@ -210,6 +228,8 @@ class Bot:
 	#
 		
 	async def _tcp_echo_client(self):
+		""" kill me now """
+	
 		self.reader, self.writer = await asyncio.open_connection(self.host, self.port, loop=self.loop)
 		await self._pass()
 		await self._nick()
@@ -245,11 +265,15 @@ class Bot:
 	
 	
 class CommandBot(Bot):
+	""" inheritance ftw """
+	
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 	#
 	
 	async def parse_message(self, rm):
+		""" copied this from a previous bot, seems to work """
+	
 		if rm.content.startswith(self.prefix):
 			m = rm.content[len(self.prefix):]
 			l = m.split(" ")
@@ -279,10 +303,12 @@ class CommandBot(Bot):
 					await c.run(rm)
 	#
 	
-	def command(self, *args, **kwargs):
-		return Command(self, *args, **kwargs)
-	#
+	def get_command(self, name):
+		""" because idfk how to subcommands """
+		return [c for c in self.commands if c.comm == name][0]
 	
-	def subcommand(self, *args, **kwargs):
-		return SubCommand(self, *args, **kwargs)
+	def command(self, *args, **kwargs):
+		""" add a command """
+		
+		return Command(self, *args, **kwargs)
 	#
