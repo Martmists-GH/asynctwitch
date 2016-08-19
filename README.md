@@ -36,7 +36,7 @@ async def example(message, word1:str, number1:int, rest:str):
 
 @bot.command('ping', alias=['pingme', 'alias2'], desc='ping command')
 async def ping(message):
-	message.reply("@{0.author}, pong!".format(message))
+	message.reply("Pong!")
 
 bot.start()	
 ```
@@ -44,6 +44,13 @@ bot.start()
 It's also possible to handle messages your own way, just use
 
 ```python
+bot = asynctwitch.Bot(
+    user = "Your twitch username",
+	oauth = "Your twitch oauth token",	# oauth:1234567890abcdefghijklmnopqrst
+	channel = "channel name",			# Defaults to Twitch
+	prefix = "yourprefixhere",			# Defaults to '!'
+)
+
 @bot.override
 async def parse_message(message):
 	# your handling here
