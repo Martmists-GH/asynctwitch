@@ -4,7 +4,6 @@ import sys
 import io
 import re
 import inspect
-from urllib import parse
 
 class CommandError(Exception):
 	"""\
@@ -112,19 +111,20 @@ class Command:
 					
 			args[x] = v # add to arguments
 			
-		if self.bot.debug:
-			print("Calling {0.comm} with arguments: {1}".format(self, args))
-			
 		try:
 			if hasattr(self, 'subcommands'): # Command has subcommands
 				subcomm = args.pop(0) # Find subcommands
 				
 				for s in self.subcommands:
 					if subcomm == s.comm:
-							await s.run(message, *args) # Run subcommand
-							break
-							
+						if self.bot.debug:
+							print("Calling {0.comm} with arguments: {1}".format(s, args))
+						await s.func(message, *args) # Run subcommand
+						break
+				
 			else: # Run command
+				if self.bot.debug:
+					print("Calling {0.comm} with arguments: {1}".format(self, args))
 				await self.func(message, *args)
 				
 		except:
@@ -210,7 +210,7 @@ class Bot:
 		"""
 		if self.debug:
 			print(self.chan, msg)
-		self.writer.write(bytes('PRIVMSG %s :%s\r\n' % (self.chan, msg), 'UTF-8'))
+		self.writer.write(bytes('PRIVMSG %s :%s\r\n' % (self.chan, str(msg)), 'UTF-8'))
 	#
 
 	async def _nick(self):
@@ -241,7 +241,12 @@ class Bot:
 		self.writer.write(bytes('PART %s\r\n' % self.chan, 'UTF-8'))
 	#
 
-
+	async def _special(self, mode):
+		"""\
+		Allows for more events
+		"""
+		self.writer.write(bytes('CAP REQ :twitch.tv/%s\r\n' % mode,'UTF-8'))
+	#
 	
 	async def _tcp_echo_client(self):
 		"""\
@@ -250,48 +255,91 @@ class Bot:
 	
 		self.reader, self.writer = await asyncio.open_connection(self.host, self.port, loop=self.loop) # Open connections
 		
-		await self._pass() #
-		await self._nick() # Log in and join
-		await self._join() #
+		await self._pass()		#
+		await self._nick()		# Log in and join
+		await self._join()		#
+		
+		modes = ['JOIN','PART','MODE']
+		for m in modes:
+			await self._special(m)
 		
 		while True: # Loop to keep receiving messages
 			rdata = (await self.reader.read(1024)).decode('utf-8') # Received bytes to str
 			
 			if self.debug:
 				print(rdata)
-				
-			data_split = re.split(r'[~\r\n]+', rdata)
-			data = data_split.pop()
+			try:
+				p = re.compile("(?P<data>.*?) (?P<action>[A-Z]*?) (?P<data2>.*)")
+				m = p.match(rdata)
 			
-			for line in data_split:
-				line = str.rstrip(line)
-				line = str.split(line)
-				
-				if len(line) >= 1:
-					if line[0] == 'PING':
+				action = m.group('action')
+				data = m.group('data')
+				data2 = m.group('data2')
+			except:
+				pass
+			else:
+				try:
+					if action == 'PING':
 						await self._pong(line[1]) # Send PONG to server
 						
-					if line[1] == 'PRIVMSG':
-						m = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv PRIVMSG #(?P<channel>[a-zA-Z0-9_]+) :(?P<content>...+)", rdata) # Get contents
-						sender = m.group('author')
-						message = m.group('content')
-						
+					elif action == 'PRIVMSG':
+						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
+						message = re.match("#[a-zA-Z0-9_]+ :(?P<content>.+)", data2).group('content')
+
 						if self.debug:
 							print(sender, message)
 							
 						messageobj = Message(message, sender, self) # Create Message object
 						
-						try:
-							await self.parse_message(messageobj) # Try parsing
-							
-						except:
-							print('Ignoring error in parse_message:') # Throw error
-							traceback.print_exc()
+						await self.message(messageobj) # Try parsing
+					
+					elif action == 'JOIN':
+						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
+						await self.user_join(sender)
+						
+					elif action == 'PART':
+						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
+						await self.user_leave(sender)
+					
+					elif action == 'MODE':
+						m = re.match("#[a-zA-Z0-9]+ (?P<mode>[+-])o (?P<user>.+?)", data2)
+						mode = m.group('mode')
+						user = m.group('user')
+						await self.user_mode(mode, user)
+					
+					else:
+						pass # Unhandled type
+						
+				except Exception as e:
+					fname = e.__traceback__.tb_next.tb_frame.f_code.co_name
+					print("Ignoring exception in {}:".format(fname))
+					traceback.print_exc()
 	#
 	
-	async def parse_message(self, rm):
+	async def user_join(self, user):
 		"""\
-		Overwrite this, unless you're using CommandBot
+		Called when a user joins
+		"""
+		pass
+	#
+	
+	async def user_leave(self, user):
+		"""\
+		Called when a user leaves
+		"""
+		pass
+	#
+	
+	async def user_mode(self, mode, user):
+		"""\
+		Called when a user is opped/de-opped
+		"""
+		pass
+	#
+	
+	async def message(self, rm):
+		"""\
+		Called when a message is sent
 		"""
 		pass
 	#
@@ -306,10 +354,11 @@ class CommandBot(Bot):
 		super().__init__(*args, **kwargs)
 	#
 	
-	async def parse_message(self, rm):
+	async def message(self, rm):
 		"""\
 		Shitty command parser I made
 		"""
+		
 		if self.debug:
 			print(rm.content)
 			
@@ -326,10 +375,6 @@ class CommandBot(Bot):
 				print("Searching for:", w)
 			
 			for c in self.commands:
-				if self.debug:
-					print('"' + parse.quote(c.comm) + '"')
-					print('"' + parse.quote(w) + '"')
-					print('')
 				if (w == c.comm or w in c.alias) and not c.unprefixed:
 					if self.debug:
 						print("Found command: {0.comm}".format(c))
