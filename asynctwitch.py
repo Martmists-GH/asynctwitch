@@ -4,7 +4,7 @@ import sys
 import io
 import re
 import inspect
-
+from urllib import parse
 
 class CommandError(Exception):
 	"""\
@@ -319,20 +319,16 @@ class CommandBot(Bot):
 	
 			m = rm.content[len(self.prefix):]
 			l = m.split(" ")
-			w = l.pop(0).lower()
+			w = l.pop(0).lower().replace("\r","")
 			m = " ".join(l)
-			
-			while w.startswith(" "):
-				w = w[1:]
 			
 			if self.debug:
 				print("Searching for:", w)
 			
 			for c in self.commands:
 				if self.debug:
-					print(c.comm)
-					print(c.comm == w)
-					print(type(w), type(c.comm))
+					print('"' + parse.quote(c.comm) + '"')
+					print('"' + parse.quote(w) + '"')
 					print('')
 				if (w == c.comm or w in c.alias) and not c.unprefixed:
 					if self.debug:
