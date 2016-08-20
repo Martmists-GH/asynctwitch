@@ -40,7 +40,7 @@ async def say(m, subcommand:str):
 c = bot.get_command('say') # I suck at programming pls help
 @c.subcommand('this')
 async def this(m):
-	bot.say("that:)
+	bot.say("that")
 
 bot.start()	
 ```
