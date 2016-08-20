@@ -49,7 +49,7 @@ class Command:
 		
 		self.func = func
 		print("Added command: " + self.comm)
-		return func
+		return self
 	#
 	
 	async def run(self, message):
@@ -113,7 +113,7 @@ class SubCommand:
 	def __call__(self, func):
 		self.func = func
 		print("Added subcommand: " + self.comm)
-		return func
+		return self
 	#
 	
 	async def run(self, message):

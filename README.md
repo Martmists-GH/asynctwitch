@@ -28,7 +28,7 @@ bot = asynctwitch.CommandBot(
 
 
 # Example command:
-@bot.command('example', alias=['moreexample'], desc='example command')
+@bot.command('example', alias=['moreexample','anothaone'], desc='example command')
 async def example(message, word1:str, number1:int, rest:str):
 	bot.say('wow')
 
@@ -37,8 +37,7 @@ async def example(message, word1:str, number1:int, rest:str):
 async def say(m, subcommand:str):
 	pass
 	
-c = bot.get_command('say') # I suck at programming pls help
-@c.subcommand('this')
+@say.subcommand('this')
 async def this(m):
 	bot.say("that")
 
