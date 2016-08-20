@@ -58,6 +58,6 @@ bot = asynctwitch.Bot(
 )
 
 @bot.override
-async def parse_message(message):
+async def message(message):
 	# your handling here
 ```
