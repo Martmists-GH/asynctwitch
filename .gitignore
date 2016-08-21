@@ -4,5 +4,6 @@ __pycache__/
 *.pypirc
 bot.py
 settings.ini
-ffplay.exe
+*.exe
 *.egg-info/
+*.mp3

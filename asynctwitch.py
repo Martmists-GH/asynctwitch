@@ -6,6 +6,7 @@ import re
 import inspect
 import configparser
 import datetime
+import subprocess
 	
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding=sys.stdout.encoding, errors="backslashreplace", line_buffering=True)
 	
@@ -94,30 +95,26 @@ class Command:
 					raise TypeError("Invalid type: got {}, {} expected".format(ann[k].__name__, v.__name__))
 					
 			args[x] = v # add to arguments
+
+		if len(self.subcommands)>0: # Command has subcommands
+			subcomm = args.pop(0) # Find subcommands
 			
-		try:
-			if len(self.subcommands)>0: # Command has subcommands
-				subcomm = args.pop(0) # Find subcommands
-				
-				for s in self.subcommands:
-					if subcomm == s.comm:
-						c = message.content.split(" ")
-						message.content = c[0] + " " + " ".join(c[2:])
+			for s in self.subcommands:
+				if subcomm == s.comm:
+					c = message.content.split(" ")
+					message.content = c[0] + " " + " ".join(c[2:])
+					
+					if self.bot.debug:
+						print("Calling subcommand {0.comm}".format(s, args))
+						print("New content:", message.content)
 						
-						if self.bot.debug:
-							print("Calling subcommand {0.comm}".format(s, args))
-							print("New content:", message.content)
-							
-						await s.run(message) # Run subcommand
-						break
-				
-			else: # Run command
-				if self.bot.debug:
-					print("Calling {0.comm} with arguments: {1}".format(self, args))
-				await self.func(message, *args)
-				
-		except:
-			await self.bot.say(self.desc)
+					await s.run(message) # Run subcommand
+					break
+			
+		else: # Run command
+			if self.bot.debug:
+				print("Calling {0.comm} with arguments: {1}".format(self, args))
+			await self.func(message, *args)
 	#
 
 	
@@ -177,7 +174,7 @@ class Bot:
 		Loads settings from file
 		"""
 		config = configparser.ConfigParser(interpolation=None)
-		config.read(config_file)
+		config.read(path)
 		self.oauth = config.get('Settings', 'oauth', fallback=None)
 		self.nick = config.get('Settings', 'username', fallback=None)
 		self.chan = "#" + config.get('Settings', 'channel', fallback="twitch")
@@ -335,6 +332,29 @@ class Bot:
 		"""
 		
 		await self.loop.run_in_executor(None, subprocess.run, (["ffplay", "-nodisp", "-autoexit", file]))
+	#
+	
+	async def play_ytdl(self, query, *, filename='song.mp3'):
+		"""
+		Requires youtube_dl to be installed
+		`pip install youtube_dl`
+		"""
+		import youtube_dl
+		
+		args = {
+			'format': 'bestaudio/best',
+			'noplaylist': True,
+			'audioformat': 'mp3',
+			'default_search': 'auto',
+			'loglevel':'quiet',
+			'outtmpl': filename
+		}
+		args.update(options)
+		ytdl = youtube_dl.YoutubeDL(args)
+		await self.loop.run_in_executor(None, ytdl.download, ([query]))
+		await self.play_file(filename)
+		os.remove(filename)
+	#
 	
 	async def event_user_join(self, user):
 		"""
@@ -402,13 +422,7 @@ class CommandBot(Bot):
 					if c.admin and not rm.author in self.admins:
 						await rm.reply("You are not allowed to use this command")
 						return
-
-					try:
-						await c.run(rm)
-						
-					except:
-						traceback.print_exc()
-						break
+					await c.run(rm)
 
 		else:
 			l = rm.content.split(" ")
