@@ -1,9 +1,11 @@
 import asyncio
 import traceback
 import sys
+import os
 import io
 import re
 import inspect
+import threading
 import configparser
 import datetime
 import subprocess
@@ -159,7 +161,8 @@ class Bot:
 			self.nick = user
 			self.chan = "#" + channel
 		
-		self.loop = asyncio.get_event_loop()
+		self.loop = asyncio.ProactorEventLoop()
+		asyncio.set_event_loop(self.loop)
 		self.host = 'irc.twitch.tv'
 		self.port = 6667
 		
@@ -330,11 +333,21 @@ class Bot:
 		For this to work, ffplay.exe, downloadable from the ffmpeg website,
 		has to be in the same folder as the bot OR added to path
 		"""
-		
-		await self.loop.run_in_executor(None, subprocess.run, (["ffplay", "-nodisp", "-autoexit", file]))
+		p = await asyncio.create_subprocess_exec(
+			'ffplay', 
+			'-nodisp', 
+			'-autoexit', 
+			'-loglevel quiet',
+			file, 
+			stdout=asyncio.subprocess.PIPE, 
+			stderr=asyncio.subprocess.PIPE, 
+			loop=self.loop
+		)
+		await p.wait()
+		await asyncio.sleep(2)
 	#
 	
-	async def play_ytdl(self, query, *, filename='song.mp3'):
+	async def play_ytdl(self, query, *, filename='song.mp3', options={}):
 		"""
 		Requires youtube_dl to be installed
 		`pip install youtube_dl`
@@ -349,6 +362,7 @@ class Bot:
 			'loglevel':'quiet',
 			'outtmpl': filename
 		}
+		
 		args.update(options)
 		ytdl = youtube_dl.YoutubeDL(args)
 		await self.loop.run_in_executor(None, ytdl.download, ([query]))
