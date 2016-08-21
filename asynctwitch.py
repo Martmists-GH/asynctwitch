@@ -334,7 +334,7 @@ class Bot:
 		has to be in the same folder as the bot OR added to path
 		"""
 		
-		self.loop.run_in_executor(None, subprocess.run, (["ffplay", "-nodisp", "-autoexit", file]))
+		await self.loop.run_in_executor(None, subprocess.run, (["ffplay", "-nodisp", "-autoexit", file]))
 	
 	async def event_user_join(self, user):
 		"""
