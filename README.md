@@ -49,7 +49,8 @@ To use a config file instead, use
 asynctwitch.Bot(config="your_settings.ini")
 # or
 asynctwitch.CommandBot(config="your_settings.ini")
-```see config.ini for an example ini
+```
+see config.ini for an example ini
 
 
 It's also possible to handle messages your own way, just use
