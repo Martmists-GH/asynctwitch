@@ -4,37 +4,25 @@ import sys
 import io
 import re
 import inspect
-
-class CommandError(Exception):
-	"""\
-	Custom exception
-	"""
-	pass
+import configparser
+import datetime
 	
+sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding=sys.stdout.encoding, errors="backslashreplace", line_buffering=True)
 	
 class Message:
-	"""\
-	Custom message object to combine message and author 
-	and to add an easy reply method
+	"""
+	Custom message object to combine message, author and timestamp
 	"""
 	
 	def __init__(self, m, a, bot):
 		self.content = m
 		self.author = a
-		self.bot = bot
-	#
-	
-	async def reply(self, m):
-		"""\
-		Reply, should mention author
-		"""
-		
-		await self.bot.say("@{}, {}".format(self.author, m))
+		self.timestamp = datetime.datetime.utcnow()
 	#
 	
 class Command:
 	
-	"""\
+	"""
 	A command class to provide methods we can use with it
 	"""
 	
@@ -46,20 +34,19 @@ class Command:
 		self.admin = admin
 		self.listed = listed
 		self.unprefixed = unprefixed
+		self.subcommands = []
 		bot.commands.append(self)
 	#
 	
 	def subcommand(self, *args, **kwargs):
-		"""\
+		"""
 		Create subcommands 
 		"""
-		if not hasattr(self, 'subcommands'): # check if commands is already on the command
-			self.subcommands = []
 		return SubCommand(self, *args, **kwargs) # set subcommand
 	#
 	
 	def __call__(self, func):
-		"""\
+		"""
 		Make it able to be a decorator
 		"""
 		
@@ -74,24 +61,21 @@ class Command:
 	async def run(self, message):
 		if self.bot.debug:
 			print("Preparing to run {0.comm}".format(self))
-		"""\
+		"""
 		Does type checking for command arguments
 		"""
 	
-		args = message.content.split(" ") # Get arguments from message
-		del args[0]
+		args = message.content.split(" ")[1:] # Get arguments from message
 		
-		args_name = inspect.getfullargspec(self.func)[0] # Get amount of arguments needed
-		del args_name[0]
+		args_name = inspect.getfullargspec(self.func)[0][1:] # Get amount of arguments needed
 		
 		if len(args) > len(args_name):
 			args[len(args_name)-1] = " ".join(args[len(args_name)-1:]) # Put all leftovers in final argument
 			
-			for i in range(len(args_name),len(args)):
-				del args[len(args_name)] # Remove from original
+			args = args[:len(args_name)]
 				
 		elif len(args) < len(args_name): # Not enough arguments, Error
-			raise CommandError('Not enough arguments for {}, required arguments: {}'.format(self.comm, ', '.join(args_name)))
+			raise Exception('Not enough arguments for {}, required arguments: {}'.format(self.comm, ', '.join(args_name)))
 			
 		ann = self.func.__annotations__ # Get type hints
 		
@@ -107,19 +91,24 @@ class Command:
 					v = ann[k](v) # Try calling __init__() with the argument
 					
 				except: # Invalid type or type unsupported
-					raise CommandError("Invalid type: got {}, {} expected".format(ann[k].__name__, v.__name__))
+					raise TypeError("Invalid type: got {}, {} expected".format(ann[k].__name__, v.__name__))
 					
 			args[x] = v # add to arguments
 			
 		try:
-			if hasattr(self, 'subcommands'): # Command has subcommands
+			if len(self.subcommands)>0: # Command has subcommands
 				subcomm = args.pop(0) # Find subcommands
 				
 				for s in self.subcommands:
 					if subcomm == s.comm:
+						c = message.content.split(" ")
+						message.content = c[0] + " " + " ".join(c[2:])
+						
 						if self.bot.debug:
-							print("Calling {0.comm} with arguments: {1}".format(s, args))
-						await s.func(message, *args) # Run subcommand
+							print("Calling subcommand {0.comm}".format(s, args))
+							print("New content:", message.content)
+							
+						await s.run(message) # Run subcommand
 						break
 				
 			else: # Run command
@@ -133,7 +122,7 @@ class Command:
 
 	
 class SubCommand(Command):
-	"""\
+	"""
 	Subcommand class
 	"""
 	
@@ -141,11 +130,12 @@ class SubCommand(Command):
 		self.comm = comm
 		self.parent = parent
 		self.bot = parent.bot
+		self.subcommands = []
 		self.parent.subcommands.append(self) # add to parent command
 	#
 	
 	def __call__(self, func):
-		"""\
+		"""
 		Make it a decorator
 		"""
 		self.func = func
@@ -158,33 +148,51 @@ class SubCommand(Command):
 	
 	
 class Bot:
-	"""\
+	"""
 	Bot class without command support 
 	"""
 	
-	def __init__(self, *, oauth=None, user=None, channel='#twitch', prefix='!', admins=[], debug=False):
-		sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding=sys.stdout.encoding, errors="backslashreplace", line_buffering=True) # I should probably remove this but fuck it
-		self.prefix = prefix
+	def __init__(self, *, oauth=None, user=None, channel='#twitch', prefix='!', admins=[], debug=False, config=None):
+		if config:
+			self.load(config)
+			
+		else:
+			self.prefix = prefix
+			self.oauth = oauth
+			self.nick = user
+			self.chan = "#" + channel
+		
 		self.loop = asyncio.get_event_loop()
 		self.host = 'irc.twitch.tv'
 		self.port = 6667
+		
 		self.commands = [] # Add this in case people want to use it
-		self.oauth = oauth
-		self.nick = user
-		self.chan = "#" + channel
+		
 		self.admins = admins
 		self.debug = debug
 	#
 	
+	def load(self, path):
+		"""
+		Loads settings from file
+		"""
+		config = configparser.ConfigParser(interpolation=None)
+		config.read(config_file)
+		self.oauth = config.get('Settings', 'oauth', fallback=None)
+		self.nick = config.get('Settings', 'username', fallback=None)
+		self.chan = "#" + config.get('Settings', 'channel', fallback="twitch")
+		self.prefix = config.get('Settings', 'prefix', fallback="!")
+	
+	
 	def override(self, func):
-		"""\
+		"""
 		Allows for overriding certain functions
 		"""
 		setattr(self, func.__name__, func)
 	#
 	
 	def start(self):
-		"""\
+		"""
 		Starts the event loop,
 		Blocking call
 		"""
@@ -198,14 +206,14 @@ class Bot:
 	# ------------------------ #
 	
 	async def _pong(self, msg):
-		"""\
+		"""
 		Tell remote we're still alive
 		"""
 		self.writer.write(bytes('PONG %s\r\n' % msg, 'UTF-8'))
 	#
 
 	async def say(self, msg):
-		"""\
+		"""
 		Send messages
 		"""
 		if self.debug:
@@ -214,42 +222,42 @@ class Bot:
 	#
 
 	async def _nick(self):
-		"""\
+		"""
 		Send name
 		"""
 		self.writer.write(bytes('NICK %s\r\n' % self.nick, 'UTF-8'))
 	#
 
 	async def _pass(self):
-		"""\
+		"""
 		Send oauth token
 		"""
 		self.writer.write(bytes('PASS %s\r\n' % self.oauth, 'UTF-8'))
 	#
 	
 	async def _join(self):
-		"""\
+		"""
 		Join a channel
 		"""
 		self.writer.write(bytes('JOIN %s\r\n' % self.chan, 'UTF-8'))
 	#
 
 	async def _part(self):
-		"""\
+		"""
 		Leave a channel
 		"""
 		self.writer.write(bytes('PART %s\r\n' % self.chan, 'UTF-8'))
 	#
 
 	async def _special(self, mode):
-		"""\
+		"""
 		Allows for more events
 		"""
 		self.writer.write(bytes('CAP REQ :twitch.tv/%s\r\n' % mode,'UTF-8'))
 	#
 	
 	async def _tcp_echo_client(self):
-		"""\
+		"""
 		Receive messages and send to parser
 		"""
 	
@@ -267,7 +275,10 @@ class Bot:
 			rdata = (await self.reader.read(1024)).decode('utf-8') # Received bytes to str
 			
 			if self.debug:
+				if not rdata:
+					continue
 				print(rdata)
+				
 			try:
 				p = re.compile("(?P<data>.*?) (?P<action>[A-Z]*?) (?P<data2>.*)")
 				m = p.match(rdata)
@@ -291,21 +302,21 @@ class Bot:
 							
 						messageobj = Message(message, sender, self) # Create Message object
 						
-						await self.message(messageobj) # Try parsing
+						await self.event_message(messageobj) # Try parsing
 					
 					elif action == 'JOIN':
 						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
-						await self.user_join(sender)
+						await self.event_user_join(sender)
 						
 					elif action == 'PART':
 						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
-						await self.user_leave(sender)
+						await self.event_user_leave(sender)
 					
 					elif action == 'MODE':
 						m = re.match("#[a-zA-Z0-9]+ (?P<mode>[+-])o (?P<user>.+?)", data2)
 						mode = m.group('mode')
 						user = m.group('user')
-						await self.user_mode(mode, user)
+						await self.event_user_mode(mode, user)
 					
 					else:
 						pass # Unhandled type
@@ -316,29 +327,38 @@ class Bot:
 					traceback.print_exc()
 	#
 	
-	async def user_join(self, user):
-		"""\
+	async def play_file(self, file):
+		"""
+		Plays audio.
+		For this to work, ffplay.exe, downloadable from the ffmpeg website,
+		has to be in the same folder as the bot OR added to path
+		"""
+		
+		self.loop.run_in_executor(None, subprocess.run, (["ffplay", "-nodisp", "-autoexit", file]))
+	
+	async def event_user_join(self, user):
+		"""
 		Called when a user joins
 		"""
 		pass
 	#
 	
-	async def user_leave(self, user):
-		"""\
+	async def event_user_leave(self, user):
+		"""
 		Called when a user leaves
 		"""
 		pass
 	#
 	
-	async def user_mode(self, mode, user):
-		"""\
+	async def event_user_mode(self, mode, user):
+		"""
 		Called when a user is opped/de-opped
 		"""
 		pass
 	#
 	
-	async def message(self, rm):
-		"""\
+	async def event_message(self, rm):
+		"""
 		Called when a message is sent
 		"""
 		pass
@@ -346,7 +366,7 @@ class Bot:
 	
 	
 class CommandBot(Bot):
-	"""\
+	"""
 	Allows the usage of Commands more easily
 	"""
 	
@@ -354,8 +374,8 @@ class CommandBot(Bot):
 		super().__init__(*args, **kwargs)
 	#
 	
-	async def message(self, rm):
-		"""\
+	async def event_message(self, rm):
+		"""
 		Shitty command parser I made
 		"""
 		
@@ -403,7 +423,7 @@ class CommandBot(Bot):
 	#
 	
 	def command(self, *args, **kwargs):
-		"""\
+		"""
 		Add a command 
 		"""
 		

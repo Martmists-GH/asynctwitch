@@ -44,7 +44,12 @@ async def this(m):
 bot.start()	
 ```
 
-
+To use a config file instead, use
+```python
+asynctwitch.Bot(config="your_settings.ini")
+# or
+asynctwitch.CommandBot(config="your_settings.ini")
+```see config.ini for an example ini
 
 
 It's also possible to handle messages your own way, just use
@@ -58,6 +63,9 @@ bot = asynctwitch.Bot(
 )
 
 @bot.override
-async def message(message):
+async def event_message(message):
 	# your handling here
 ```
+
+
+To use `await bot.play_file('file.mp3')`, ffplay has to be installed. It can be found on the ffmpeg website
