@@ -57,16 +57,11 @@ class Command:
 		"""
 		
 		self.func = func
-		
-		if self.bot.debug:
-			print("Added command: " + self.comm)
-			
+
 		return self
 	#
 	
 	async def run(self, message):
-		if self.bot.debug:
-			print("Preparing to run {0.comm}".format(self))
 		"""
 		Does type checking for command arguments
 		"""
@@ -109,16 +104,10 @@ class Command:
 					c = message.content.split(" ")
 					message.content = c[0] + " " + " ".join(c[2:])
 					
-					if self.bot.debug:
-						print("Calling subcommand {0.comm}".format(s, args))
-						print("New content:", message.content)
-						
 					await s.run(message) # Run subcommand
 					break
 			
 		else: # Run command
-			if self.bot.debug:
-				print("Calling {0.comm} with arguments: {1}".format(self, args))
 			await self.func(message, *args)
 	#
 
@@ -142,9 +131,6 @@ class SubCommand(Command):
 		"""
 		self.func = func
 		
-		if self.bot.debug:
-			print("Added subcommand: " + self.comm)
-			
 		return self
 	#
 	
@@ -170,7 +156,6 @@ class Bot:
 		self.port = 6667
 		
 		self.admins = admins
-		self.debug = debug
 	#
 	
 	def load(self, path):
@@ -217,8 +202,6 @@ class Bot:
 		"""
 		Send messages
 		"""
-		if self.debug:
-			print(self.chan, msg)
 		self.writer.write(bytes('PRIVMSG %s :%s\r\n' % (self.chan, str(msg)), 'UTF-8'))
 	#
 
@@ -327,6 +310,18 @@ class Bot:
 					traceback.print_exc()
 	#
 	
+	async def stop(self, exit=False):
+		"""
+		Stops the bot and disables using it again.
+		Useful for a restart command I guess
+		"""
+		self.player.terminate()
+		self.loop.stop()
+		self.loop.close()
+		if exit:
+			os._exit(0)
+	#
+	
 	async def play_file(self, file):
 		"""
 		Plays audio.
@@ -338,8 +333,8 @@ class Bot:
 		
 		j = json.loads(j.decode().strip())
 		
-		await asyncio.create_subprocess_exec('ffplay', '-nodisp', '-autoexit', '-v', '-8', file)
-		await asyncio.sleep(math.ceil(float(j['format']['duration'])))
+		self.player = await asyncio.create_subprocess_exec('ffplay', '-nodisp', '-autoexit', '-v', '-8', file, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+		await asyncio.sleep( math.ceil( float( j['format']['duration'] )) + 2)
 		return True
 	#
 	
@@ -459,10 +454,10 @@ class CommandBot(Bot):
 		return Command(self, *args, **kwargs)
 	#
 	
-	def play_list(self, l):
+	async def play_list(self, l):
 		self.playlist = l
 		while self.playlist:
 			song = self.playlist.pop(0)
 			self.playing = song
-			await play_ytdl(song)
+			await self.play_ytdl(song)
 	#
