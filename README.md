@@ -69,6 +69,7 @@ async def event_message(message):
 ```
 
 
-To use `await bot.play_file('file.mp3')`, ffplay has to be installed. It can be found on the ffmpeg website.
+To use `await bot.play_file('file.mp3')`, ffprobe, ffmpeg and ffplay have to be installed. They can be found on the ffmpeg website.
 
 To use `await bot.play_ytdl('song')`, youtube_dl has to be installed. Use `pip install youtube_dl` to install it.
+You will also need the requirements for `bot.play_file`

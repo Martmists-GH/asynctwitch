@@ -5,12 +5,14 @@ import os
 import io
 import re
 import inspect
-import threading
+import math
+import json
 import configparser
 import datetime
 import subprocess
 	
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding=sys.stdout.encoding, errors="backslashreplace", line_buffering=True)
+# fix unicode characters breaking the bot
 	
 class Message:
 	"""
@@ -22,6 +24,7 @@ class Message:
 		self.author = a
 		self.timestamp = datetime.datetime.utcnow()
 	#
+	
 	
 class Command:
 	
@@ -151,7 +154,7 @@ class Bot:
 	Bot class without command support 
 	"""
 	
-	def __init__(self, *, oauth=None, user=None, channel='#twitch', prefix='!', admins=[], debug=False, config=None):
+	def __init__(self, *, oauth=None, user=None, channel='#twitch', prefix='!', admins=[], config=None):
 		if config:
 			self.load(config)
 			
@@ -159,14 +162,12 @@ class Bot:
 			self.prefix = prefix
 			self.oauth = oauth
 			self.nick = user
-			self.chan = "#" + channel
+			self.chan = "#" + channel.lower()
 		
 		self.loop = asyncio.ProactorEventLoop()
 		asyncio.set_event_loop(self.loop)
 		self.host = 'irc.twitch.tv'
 		self.port = 6667
-		
-		self.commands = [] # Add this in case people want to use it
 		
 		self.admins = admins
 		self.debug = debug
@@ -182,7 +183,7 @@ class Bot:
 		self.nick = config.get('Settings', 'username', fallback=None)
 		self.chan = "#" + config.get('Settings', 'channel', fallback="twitch")
 		self.prefix = config.get('Settings', 'prefix', fallback="!")
-	
+	#
 	
 	def override(self, func):
 		"""
@@ -270,14 +271,15 @@ class Bot:
 		modes = ['JOIN','PART','MODE']
 		for m in modes:
 			await self._special(m)
+			
+		await self.event_ready()
 		
 		while True: # Loop to keep receiving messages
 			rdata = (await self.reader.read(1024)).decode('utf-8') # Received bytes to str
-			
-			if self.debug:
-				if not rdata:
-					continue
-				print(rdata)
+			await self.raw_event(rdata)
+
+			if not rdata:
+				continue
 				
 			try:
 				p = re.compile("(?P<data>.*?) (?P<action>[A-Z]*?) (?P<data2>.*)")
@@ -296,10 +298,7 @@ class Bot:
 					elif action == 'PRIVMSG':
 						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
 						message = re.match("#[a-zA-Z0-9_]+ :(?P<content>.+)", data2).group('content')
-
-						if self.debug:
-							print(sender, message)
-							
+						
 						messageobj = Message(message, sender, self) # Create Message object
 						
 						await self.event_message(messageobj) # Try parsing
@@ -319,7 +318,8 @@ class Bot:
 						await self.event_user_mode(mode, user)
 					
 					else:
-						pass # Unhandled type
+						print("Unknown event:", action)
+						print(rdata)
 						
 				except Exception as e:
 					fname = e.__traceback__.tb_next.tb_frame.f_code.co_name
@@ -330,24 +330,20 @@ class Bot:
 	async def play_file(self, file):
 		"""
 		Plays audio.
-		For this to work, ffplay.exe, downloadable from the ffmpeg website,
-		has to be in the same folder as the bot OR added to path
+		For this to work, ffplay, ffmpeg and ffprobe, downloadable from the ffmpeg website,
+		have to be in the same folder as the bot OR added to path.
 		"""
-		p = await asyncio.create_subprocess_exec(
-			'ffplay', 
-			'-nodisp', 
-			'-autoexit', 
-			'-loglevel quiet',
-			file, 
-			stdout=asyncio.subprocess.PIPE, 
-			stderr=asyncio.subprocess.PIPE, 
-			loop=self.loop
-		)
-		await p.wait()
-		await asyncio.sleep(2)
+		
+		j = await self.loop.run_in_executor(None, subprocess.check_output, ['ffprobe', '-v', '-8', '-print_format', 'json', '-show_format', file])
+		
+		j = json.loads(j.decode().strip())
+		
+		await asyncio.create_subprocess_exec('ffplay', '-nodisp', '-autoexit', '-v', '-8', file)
+		await asyncio.sleep(math.ceil(float(j['format']['duration'])))
+		return True
 	#
 	
-	async def play_ytdl(self, query, *, filename='song.mp3', options={}):
+	async def play_ytdl(self, query, *, filename='song.mp3', cleanup=True, options={}):
 		"""
 		Requires youtube_dl to be installed
 		`pip install youtube_dl`
@@ -362,12 +358,26 @@ class Bot:
 			'loglevel':'quiet',
 			'outtmpl': filename
 		}
-		
 		args.update(options)
 		ytdl = youtube_dl.YoutubeDL(args)
 		await self.loop.run_in_executor(None, ytdl.download, ([query]))
 		await self.play_file(filename)
-		os.remove(filename)
+		if cleanup:
+			os.remove(filename)
+	#
+	
+	async def event_ready(self):
+		"""
+		Called when the bot is ready for use
+		"""
+		pass
+	#
+	
+	async def raw_event(self, data):
+		"""
+		Called on all events after event_ready
+		"""
+		pass
 	#
 	
 	async def event_user_join(self, user):
@@ -406,6 +416,9 @@ class CommandBot(Bot):
 	
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
+		self.commands = []
+		self.playlist = []
+		self.playing = None
 	#
 	
 	async def event_message(self, rm):
@@ -413,25 +426,15 @@ class CommandBot(Bot):
 		Shitty command parser I made
 		"""
 		
-		if self.debug:
-			print(rm.content)
-			
 		if rm.content.startswith(self.prefix):
-			if self.debug:
-				print("Found prefix")
 	
 			m = rm.content[len(self.prefix):]
 			l = m.split(" ")
 			w = l.pop(0).lower().replace("\r","")
 			m = " ".join(l)
 			
-			if self.debug:
-				print("Searching for:", w)
-			
 			for c in self.commands:
 				if (w == c.comm or w in c.alias) and not c.unprefixed:
-					if self.debug:
-						print("Found command: {0.comm}".format(c))
 
 					if c.admin and not rm.author in self.admins:
 						await rm.reply("You are not allowed to use this command")
@@ -444,10 +447,8 @@ class CommandBot(Bot):
 			
 			for c in self.commands:
 				if (w == c.comm or w in c.alias) and c.unprefixed:
-					if self.debug:
-						print("Found unprefixed command")
-					
 					await c.run(rm)
+					break
 	#
 	
 	def command(self, *args, **kwargs):
@@ -456,4 +457,12 @@ class CommandBot(Bot):
 		"""
 		
 		return Command(self, *args, **kwargs)
+	#
+	
+	def play_list(self, l):
+		self.playlist = l
+		while self.playlist:
+			song = self.playlist.pop(0)
+			self.playing = song
+			await play_ytdl(song)
 	#
