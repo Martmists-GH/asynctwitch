@@ -61,7 +61,8 @@ class Command:
 		return self
 	#
 	
-	async def run(self, message):
+	@asyncio.coroutine
+	def run(self, message):
 		"""
 		Does type checking for command arguments
 		"""
@@ -104,11 +105,11 @@ class Command:
 					c = message.content.split(" ")
 					message.content = c[0] + " " + " ".join(c[2:])
 					
-					await s.run(message) # Run subcommand
+					yield from s.run(message) # Run subcommand
 					break
 			
 		else: # Run command
-			await self.func(message, *args)
+			yield from self.func(message, *args)
 	#
 
 	
@@ -191,75 +192,83 @@ class Bot:
 	# --- Needed Functions --- #
 	# ------------------------ #
 	
-	async def _pong(self, msg):
+	@asyncio.coroutine
+	def _pong(self, msg):
 		"""
 		Tell remote we're still alive
 		"""
 		self.writer.write(bytes('PONG %s\r\n' % msg, 'UTF-8'))
 	#
 
-	async def say(self, msg):
+	@asyncio.coroutine
+	def say(self, msg):
 		"""
 		Send messages
 		"""
 		self.writer.write(bytes('PRIVMSG %s :%s\r\n' % (self.chan, str(msg)), 'UTF-8'))
 	#
 
-	async def _nick(self):
+	@asyncio.coroutine
+	def _nick(self):
 		"""
 		Send name
 		"""
 		self.writer.write(bytes('NICK %s\r\n' % self.nick, 'UTF-8'))
 	#
 
-	async def _pass(self):
+	@asyncio.coroutine
+	def _pass(self):
 		"""
 		Send oauth token
 		"""
 		self.writer.write(bytes('PASS %s\r\n' % self.oauth, 'UTF-8'))
 	#
 	
-	async def _join(self):
+	@asyncio.coroutine
+	def _join(self):
 		"""
 		Join a channel
 		"""
 		self.writer.write(bytes('JOIN %s\r\n' % self.chan, 'UTF-8'))
 	#
 
-	async def _part(self):
+	@asyncio.coroutine
+	def _part(self):
 		"""
 		Leave a channel
 		"""
 		self.writer.write(bytes('PART %s\r\n' % self.chan, 'UTF-8'))
 	#
 
-	async def _special(self, mode):
+	@asyncio.coroutine
+	def _special(self, mode):
 		"""
 		Allows for more events
 		"""
 		self.writer.write(bytes('CAP REQ :twitch.tv/%s\r\n' % mode,'UTF-8'))
 	#
 	
-	async def _tcp_echo_client(self):
+	@asyncio.coroutine
+	def _tcp_echo_client(self):
 		"""
 		Receive messages and send to parser
 		"""
 	
-		self.reader, self.writer = await asyncio.open_connection(self.host, self.port, loop=self.loop) # Open connections
+		self.reader, self.writer = yield from asyncio.open_connection(self.host, self.port, loop=self.loop) # Open connections
 		
-		await self._pass()		#
-		await self._nick()		# Log in and join
-		await self._join()		#
+		yield from self._pass()		#
+		yield from self._nick()		# Log in and join
+		yield from self._join()		#
 		
 		modes = ['JOIN','PART','MODE']
 		for m in modes:
-			await self._special(m)
+			yield from self._special(m)
 			
-		await self.event_ready()
+		yield from self.event_ready()
 		
 		while True: # Loop to keep receiving messages
-			rdata = (await self.reader.read(1024)).decode('utf-8') # Received bytes to str
-			await self.raw_event(rdata)
+			rdata = (yield from self.reader.read(1024)).decode('utf-8') # Received bytes to str
+			yield from self.raw_event(rdata)
 
 			if not rdata:
 				continue
@@ -276,7 +285,7 @@ class Bot:
 			else:
 				try:
 					if action == 'PING':
-						await self._pong(line[1]) # Send PONG to server
+						yield from self._pong(line[1]) # Send PONG to server
 						
 					elif action == 'PRIVMSG':
 						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
@@ -284,33 +293,39 @@ class Bot:
 						
 						messageobj = Message(message, sender, self) # Create Message object
 						
-						await self.event_message(messageobj) # Try parsing
+						yield from self.event_message(messageobj) # Call function
 					
 					elif action == 'JOIN':
 						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
-						await self.event_user_join(sender)
+						yield from self.event_user_join(sender) # Call function
 						
 					elif action == 'PART':
 						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
-						await self.event_user_leave(sender)
+						yield from self.event_user_leave(sender) # Call function
 					
 					elif action == 'MODE':
 						m = re.match("#[a-zA-Z0-9]+ (?P<mode>[+-])o (?P<user>.+?)", data2)
 						mode = m.group('mode')
 						user = m.group('user')
-						await self.event_user_mode(mode, user)
+						yield from self.event_user_mode(mode, user) # Call function
 					
 					else:
-						print("Unknown event:", action)
+						print("Unknown event:", action) 
 						print(rdata)
 						
 				except Exception as e:
-					fname = e.__traceback__.tb_next.tb_frame.f_code.co_name
-					print("Ignoring exception in {}:".format(fname))
-					traceback.print_exc()
+					yield from self.parse_error(e)
 	#
 	
-	async def stop(self, exit=False):
+	@asyncio.coroutine
+	def parse_error(self, e):
+		fname = e.__traceback__.tb_next.tb_frame.f_code.co_name # Callen on errors
+		print("Ignoring exception in {}:".format(fname))
+		traceback.print_exc()
+	#
+	
+	@asyncio.coroutine
+	def stop(self, exit=False):
 		"""
 		Stops the bot and disables using it again.
 		Useful for a restart command I guess
@@ -322,23 +337,25 @@ class Bot:
 			os._exit(0)
 	#
 	
-	async def play_file(self, file):
+	@asyncio.coroutine
+	def play_file(self, file):
 		"""
 		Plays audio.
 		For this to work, ffplay, ffmpeg and ffprobe, downloadable from the ffmpeg website,
 		have to be in the same folder as the bot OR added to path.
 		"""
 		
-		j = await self.loop.run_in_executor(None, subprocess.check_output, ['ffprobe', '-v', '-8', '-print_format', 'json', '-show_format', file])
+		j = yield from self.loop.run_in_executor(None, subprocess.check_output, ['ffprobe', '-v', '-8', '-print_format', 'json', '-show_format', file])
 		
 		j = json.loads(j.decode().strip())
 		
-		self.player = await asyncio.create_subprocess_exec('ffplay', '-nodisp', '-autoexit', '-v', '-8', file, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-		await asyncio.sleep( math.ceil( float( j['format']['duration'] )) + 2)
+		self.player = yield from asyncio.create_subprocess_exec('ffplay', '-nodisp', '-autoexit', '-v', '-8', file, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+		yield from asyncio.sleep( math.ceil( float( j['format']['duration'] )) + 2)
 		return True
 	#
 	
-	async def play_ytdl(self, query, *, filename='song.mp3', cleanup=True, options={}):
+	@asyncio.coroutine
+	def play_ytdl(self, query, *, filename='song.mp3', cleanup=True, options={}):
 		"""
 		Requires youtube_dl to be installed
 		`pip install youtube_dl`
@@ -355,48 +372,54 @@ class Bot:
 		}
 		args.update(options)
 		ytdl = youtube_dl.YoutubeDL(args)
-		await self.loop.run_in_executor(None, ytdl.download, ([query]))
-		await self.play_file(filename)
+		yield from self.loop.run_in_executor(None, ytdl.download, ([query]))
+		yield from self.play_file(filename)
 		if cleanup:
 			os.remove(filename)
 	#
 	
-	async def event_ready(self):
+	@asyncio.coroutine
+	def event_ready(self):
 		"""
 		Called when the bot is ready for use
 		"""
 		pass
 	#
 	
-	async def raw_event(self, data):
+	@asyncio.coroutine
+	def raw_event(self, data):
 		"""
 		Called on all events after event_ready
 		"""
 		pass
 	#
 	
-	async def event_user_join(self, user):
+	@asyncio.coroutine
+	def event_user_join(self, user):
 		"""
 		Called when a user joins
 		"""
 		pass
 	#
 	
-	async def event_user_leave(self, user):
+	@asyncio.coroutine
+	def event_user_leave(self, user):
 		"""
 		Called when a user leaves
 		"""
 		pass
 	#
 	
-	async def event_user_mode(self, mode, user):
+	@asyncio.coroutine
+	def event_user_mode(self, mode, user):
 		"""
 		Called when a user is opped/de-opped
 		"""
 		pass
 	#
 	
-	async def event_message(self, rm):
+	@asyncio.coroutine
+	def event_message(self, rm):
 		"""
 		Called when a message is sent
 		"""
@@ -416,7 +439,8 @@ class CommandBot(Bot):
 		self.playing = None
 	#
 	
-	async def event_message(self, rm):
+	@asyncio.coroutine
+	def event_message(self, rm):
 		"""
 		Shitty command parser I made
 		"""
@@ -432,9 +456,9 @@ class CommandBot(Bot):
 				if (w == c.comm or w in c.alias) and not c.unprefixed:
 
 					if c.admin and not rm.author in self.admins:
-						await rm.reply("You are not allowed to use this command")
+						yield from rm.reply("You are not allowed to use this command")
 						return
-					await c.run(rm)
+					yield from c.run(rm)
 
 		else:
 			l = rm.content.split(" ")
@@ -442,7 +466,7 @@ class CommandBot(Bot):
 			
 			for c in self.commands:
 				if (w == c.comm or w in c.alias) and c.unprefixed:
-					await c.run(rm)
+					yield from c.run(rm)
 					break
 	#
 	
@@ -454,10 +478,11 @@ class CommandBot(Bot):
 		return Command(self, *args, **kwargs)
 	#
 	
-	async def play_list(self, l):
+	@asyncio.coroutine
+	def play_list(self, l):
 		self.playlist = l
 		while self.playlist:
 			song = self.playlist.pop(0)
 			self.playing = song
-			await self.play_ytdl(song)
+			yield from self.play_ytdl(song)
 	#
