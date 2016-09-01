@@ -20,8 +20,9 @@ class Message:
     """
     
     def __init__(self, m, a, tags):
-        for k, v in tags.iteritems():
-            setattr(self, k, v)
+        if tags:
+            for k, v in tags.iteritems():
+                setattr(self, k, v)
         self.content = m
         self.author = a
         self.timestamp = datetime.datetime.utcnow()
@@ -311,8 +312,6 @@ class Bot:
             except:
                 pass
             else:
-                
-                print(rdata)
                 
                 try:
                     if action == 'PING':
