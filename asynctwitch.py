@@ -12,14 +12,16 @@ import datetime
 import subprocess
 	
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding=sys.stdout.encoding, errors="backslashreplace", line_buffering=True)
-# fix unicode characters breaking the bot
+# fix unicode characters breaking the bot on windows
 	
 class Message:
 	"""
 	Custom message object to combine message, author and timestamp
 	"""
 	
-	def __init__(self, m, a, bot):
+	def __init__(self, m, a, tags):
+		for k, v in tags.iteritems():
+			setattr(self, k, v)
 		self.content = m
 		self.author = a
 		self.timestamp = datetime.datetime.utcnow()
@@ -48,7 +50,7 @@ class Command:
 		"""
 		Create subcommands 
 		"""
-		return SubCommand(self, *args, **kwargs) # set subcommand
+		return SubCommand(self, *args, **kwargs)
 	#
 	
 	def __call__(self, func):
@@ -67,48 +69,48 @@ class Command:
 		Does type checking for command arguments
 		"""
 	
-		args = message.content.split(" ")[1:] # Get arguments from message
+		args = message.content.split(" ")[1:]
 		
-		args_name = inspect.getfullargspec(self.func)[0][1:] # Get amount of arguments needed
+		args_name = inspect.getfullargspec(self.func)[0][1:]
 		
 		if len(args) > len(args_name):
-			args[len(args_name)-1] = " ".join(args[len(args_name)-1:]) # Put all leftovers in final argument
+			args[len(args_name)-1] = " ".join(args[len(args_name)-1:])
 			
 			args = args[:len(args_name)]
 				
-		elif len(args) < len(args_name): # Not enough arguments, Error
+		elif len(args) < len(args_name):
 			raise Exception('Not enough arguments for {}, required arguments: {}'.format(self.comm, ', '.join(args_name)))
 			
-		ann = self.func.__annotations__ # Get type hints
+		ann = self.func.__annotations__
 		
-		for x in range(0, len(args_name)): # loop through arguments
+		for x in range(0, len(args_name)):
 			v = args[x]
 			k = args_name[x]
 			
 			if type(v) == ann[k]: 
-				pass # Content is correct type already
+				pass
 				
 			else:
 				try:
-					v = ann[k](v) # Try calling __init__() with the argument
+					v = ann[k](v)
 					
-				except: # Invalid type or type unsupported
+				except: 
 					raise TypeError("Invalid type: got {}, {} expected".format(ann[k].__name__, v.__name__))
 					
-			args[x] = v # add to arguments
+			args[x] = v
 
-		if len(self.subcommands)>0: # Command has subcommands
-			subcomm = args.pop(0) # Find subcommands
+		if len(self.subcommands)>0:
+			subcomm = args.pop(0)
 			
 			for s in self.subcommands:
 				if subcomm == s.comm:
 					c = message.content.split(" ")
 					message.content = c[0] + " " + " ".join(c[2:])
 					
-					yield from s.run(message) # Run subcommand
+					yield from s.run(message)
 					break
 			
-		else: # Run command
+		else:
 			yield from self.func(message, *args)
 	#
 
@@ -123,16 +125,7 @@ class SubCommand(Command):
 		self.parent = parent
 		self.bot = parent.bot
 		self.subcommands = []
-		self.parent.subcommands.append(self) # add to parent command
-	#
-	
-	def __call__(self, func):
-		"""
-		Make it a decorator
-		"""
-		self.func = func
-		
-		return self
+		self.parent.subcommands.append(self)
 	#
 	
 	
@@ -148,7 +141,7 @@ class Bot:
 		else:
 			self.prefix = prefix
 			self.oauth = oauth
-			self.nick = user
+			self.nick = user.lower()
 			self.chan = "#" + channel.lower()
 		
 		self.loop = asyncio.ProactorEventLoop()
@@ -157,6 +150,13 @@ class Bot:
 		self.port = 6667
 		
 		self.admins = admins
+		
+		self.mod = False
+		
+		self.message_count = 0
+		
+		
+		self.channel_moderators = []
 	#
 	
 	def load(self, path):
@@ -205,7 +205,15 @@ class Bot:
 		"""
 		Send messages
 		"""
+		max = 100 if self.mod else 20
+		
+		while self.message_count == max:
+			yield from asyncio.sleep(1)
+		
+		self.message_count += 1
 		self.writer.write(bytes('PRIVMSG %s :%s\r\n' % (self.chan, str(msg)), 'UTF-8'))
+		yield from asyncio.sleep(30)
+		self.message_count -= 1
 	#
 
 	@asyncio.coroutine
@@ -254,60 +262,140 @@ class Bot:
 		Receive messages and send to parser
 		"""
 	
-		self.reader, self.writer = yield from asyncio.open_connection(self.host, self.port, loop=self.loop) # Open connections
+		self.reader, self.writer = yield from asyncio.open_connection(self.host, self.port, loop=self.loop)
 		
-		yield from self._pass()		#
-		yield from self._nick()		# Log in and join
-		yield from self._join()		#
+		yield from self._pass()
+		yield from self._nick()
 		
-		modes = ['JOIN','PART','MODE']
+		modes = ['commands','tags','membership']
 		for m in modes:
 			yield from self._special(m)
-			
+		
+		yield from self._join()
+		
 		yield from self.event_ready()
 		
-		while True: # Loop to keep receiving messages
-			rdata = (yield from self.reader.read(1024)).decode('utf-8') # Received bytes to str
-			yield from self.raw_event(rdata)
-
+		while True:
+			rdata = (yield from self.reader.read(1024)).decode('utf-8')
+			
 			if not rdata:
 				continue
 				
+			yield from self.raw_event(rdata)
+				
 			try:
-				p = re.compile("(?P<data>.*?) (?P<action>[A-Z]*?) (?P<data2>.*)")
+				if rdata.startswith("@"):
+					p = re.compile("@(?P<tags>.*?) (?P<data>.*?) (?P<action>[A-Z]+?) (?P<data2>.*)")
+				else:
+					p = re.compile("(?P<data>.*?) (?P<action>[A-Z]+?) (?P<data2>.*)")
+				
 				m = p.match(rdata)
-			
+				
+				try:
+					tags = group('tags')
+					
+					tagdict = {}
+					for tag in tags.split(';'):
+						t = tag.split('=')
+						if t.isnumeric():
+							t = int(t)
+						tagdict[t[0]] = t[1]
+					tags = tagdict
+				except:
+					tags = None
+				
 				action = m.group('action')
 				data = m.group('data')
 				data2 = m.group('data2')
+				
 			except:
 				pass
 			else:
+				
+				print(rdata)
+				
 				try:
 					if action == 'PING':
-						yield from self._pong(line[1]) # Send PONG to server
+						yield from self._pong(line[1])
 						
 					elif action == 'PRIVMSG':
 						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
 						message = re.match("#[a-zA-Z0-9_]+ :(?P<content>.+)", data2).group('content')
 						
-						messageobj = Message(message, sender, self) # Create Message object
+						messageobj = Message(message, sender, tags)
 						
-						yield from self.event_message(messageobj) # Call function
+						yield from self.event_message(messageobj)
 					
 					elif action == 'JOIN':
 						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
-						yield from self.event_user_join(sender) # Call function
+						yield from self.event_user_join(sender)
 						
 					elif action == 'PART':
 						sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)@(?P=author).tmi.twitch.tv", data).group('author')
-						yield from self.event_user_leave(sender) # Call function
+						yield from self.event_user_leave(sender)
 					
 					elif action == 'MODE':
+						
 						m = re.match("#[a-zA-Z0-9]+ (?P<mode>[+-])o (?P<user>.+?)", data2)
 						mode = m.group('mode')
 						user = m.group('user')
-						yield from self.event_user_mode(mode, user) # Call function
+						
+						if mode == '+':
+							self.channel_moderators.append(user)
+							yield from self.event_user_op(user)
+						else:
+							[self.channel_moderators.pop(x) for x, u in enumerate(self.channel_moderators) if u == user]
+							yield from self.event_user_deop(user)
+						
+					
+					elif action == 'USERSTATE':
+						if not tags: 
+							continue
+							
+						if tags['mod'] == 1:
+							self.mod = True
+						else:
+							self.mod = False
+							
+						yield from self.event_userstate(tags)
+					
+					elif action == 'ROOMSTATE':
+						yield from self.event_roomstate(tags)
+						
+					elif action == 'NOTICE':
+						yield from self.event_notice(tags)
+					
+					elif action == 'CLEARCHAT':
+						user = re.match("#[a-zA-Z0-9_]+ :(?P<user>.+)", data2).group('user')
+						
+						if 'ban-duration' in tags.keys():
+							yield from self.event_timeout(user, tags)
+						else:
+							yield from self.event_ban(user, tags)
+							
+					elif action == 'HOSTTARGET':
+						m = re.match("#[a-zA-Z0-9_]+ :(?P<channel>.+?) (?P<count>[0-9]+)", data2)
+						channel = m.group('channel')
+						viewcount = m.group('count')
+						
+						if channel == '-':
+							yield from self.event_host_stop(viewers)
+						else:
+							yield from self.event_host_start(channel, viewers)
+						
+					elif action == 'USERNOTICE':
+						if re.search(":", data2):
+							message = re.match("#[a-zA-Z0-9_]+ :(?P<message>.+?)", data2).group('message')
+						else:
+							message = ''
+							
+						user = tags['login']
+						
+						yield from self.event_subscribe(user, message, tags)
+						
+					elif action == 'CAP': 
+						# We don't need this for anything, so just ignore it
+						continue 
 					
 					else:
 						print("Unknown event:", action) 
@@ -318,10 +406,148 @@ class Bot:
 	#
 	
 	@asyncio.coroutine
-	def parse_error(self, e):
-		fname = e.__traceback__.tb_next.tb_frame.f_code.co_name # Callen on errors
-		print("Ignoring exception in {}:".format(fname))
-		traceback.print_exc()
+	def event_subscribe(self, user, message, tags):
+		"""
+		Called when someone (re-)subscribes.
+		
+		
+		"""
+	
+	@asyncio.coroutine
+	def event_host_start(self, viewercount):
+		"""
+		Called when the streamer starts hosting.
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def event_host_stop(self, channel, viewercount):
+		"""
+		Called when the streamer stops hosting.
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def event_ban(self, user, tags):
+		"""
+		Called when a user is banned.
+		
+		Example of what `tags` returns:
+		
+		{
+			'ban-reason': 'I dont like you'
+		}
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def event_timeout(self, user, tags):
+		"""
+		Called when a user is timed out.
+		
+		Example of what `tags` returns:
+		
+		{
+			'ban-reason': 'take 10 seconds to think about what you just said'
+			'ban-duration': 10
+		}
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def event_roomstate(self, tags):
+		"""
+		Triggered when channel chat settings change.
+		
+		Example of what `tags` returns:
+		
+		{
+			'emote-only': 0
+		}
+		"""
+		pass
+	#
+	
+	
+	@asyncio.coroutine
+	def event_userstate(self, tags):
+		"""
+		Triggered when the bot sends a message.
+		
+		Example for what `tags` can return:
+		
+		{
+			'badges': 'moderator/1',
+			'color': '#00FF7F',
+			'display-name': 'martmistsbot',
+			'emote-sets': 0,
+			'mod': 1,
+			'subscriber': 0,
+			'turbo', 0,
+			'user-type': 'mod'
+		}
+		"""
+		pass
+	#	
+	
+	@asyncio.coroutine
+	def event_ready(self):
+		"""
+		Called when the bot is ready for use
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def raw_event(self, data):
+		"""
+		Called on all events after event_ready
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def event_user_join(self, user):
+		"""
+		Called when a user joins
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def event_user_leave(self, user):
+		"""
+		Called when a user leaves
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def event_user_deop(self, user):
+		"""
+		Called when a user is de-opped
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def event_user_op(self, user):
+		"""
+		Called when a user is opped
+		"""
+		pass
+	#
+	
+	@asyncio.coroutine
+	def event_message(self, rm):
+		"""
+		Called when a message is sent
+		"""
+		pass
 	#
 	
 	@asyncio.coroutine
@@ -379,51 +605,10 @@ class Bot:
 	#
 	
 	@asyncio.coroutine
-	def event_ready(self):
-		"""
-		Called when the bot is ready for use
-		"""
-		pass
-	#
-	
-	@asyncio.coroutine
-	def raw_event(self, data):
-		"""
-		Called on all events after event_ready
-		"""
-		pass
-	#
-	
-	@asyncio.coroutine
-	def event_user_join(self, user):
-		"""
-		Called when a user joins
-		"""
-		pass
-	#
-	
-	@asyncio.coroutine
-	def event_user_leave(self, user):
-		"""
-		Called when a user leaves
-		"""
-		pass
-	#
-	
-	@asyncio.coroutine
-	def event_user_mode(self, mode, user):
-		"""
-		Called when a user is opped/de-opped
-		"""
-		pass
-	#
-	
-	@asyncio.coroutine
-	def event_message(self, rm):
-		"""
-		Called when a message is sent
-		"""
-		pass
+	def parse_error(self, e):
+		fname = e.__traceback__.tb_next.tb_frame.f_code.co_name
+		print("Ignoring exception in {}:".format(fname))
+		traceback.print_exc()
 	#
 	
 	
