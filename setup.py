@@ -10,9 +10,9 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     name='asynctwitch',
 
-    version='1.0.0',
+    version='2.0.0',
 
-    description='Asynchonously work with twitch chat',
+    description='Asynchonous wrapper for twitch IRC3',
     long_description=long_description,
 
     url='https://github.com/martmists/asynctwitch',
@@ -30,8 +30,8 @@ setup(
 
         'License :: OSI Approved :: MIT License',
 
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.4+',
     ],
-    keywords='asynchronous twitch bot library with builtin (optional) commands system',
+    keywords='asynchronous twitch bot library with built-in (optional) commands system',
     py_modules=["asynctwitch"]
 )
