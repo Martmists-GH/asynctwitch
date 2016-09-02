@@ -173,9 +173,9 @@ class Bot:
         self.loop.run_until_complete(self._tcp_echo_client())
     
     @asyncio.coroutine
-    def _pong(self, msg):
+    def _pong(self, src):
         """ Tell remote we"re still alive """
-        self.writer.write(bytes("PONG %s\r\n" % msg, "UTF-8"))
+        self.writer.write(bytes("PONG %s\r\n" % src, "UTF-8"))
     
 
     @asyncio.coroutine
@@ -283,7 +283,7 @@ class Bot:
                 
                 try:
                     if action == "PING":
-                        yield from self._pong(line[1])
+                        yield from self._pong(data)
                         
                     elif action == "PRIVMSG":
                         sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
