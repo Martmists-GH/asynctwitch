@@ -630,8 +630,8 @@ class CommandBot(Bot):
     
     @asyncio.coroutine
     def play_list(self, l):
-		""" play songs from a list using play_ytdl """
-		
+        """ play songs from a list using play_ytdl """
+        
         self.playlist = l
         while self.playlist:
             song = self.playlist.pop(0)
