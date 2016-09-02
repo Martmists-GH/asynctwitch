@@ -255,6 +255,10 @@ class Bot:
             try:
                 if rdata.startswith("@"):
                     p = re.compile("@(?P<tags>.*?) (?P<data>.*?) (?P<action>[A-Z]+?) (?P<data2>.*)")
+                
+                elif rdata.startswith("PING"):
+                    p = re.compile("(?P<action>[A-Z]+?) (?P<data2>.*)")
+                
                 else:
                     p = re.compile("(?P<data>.*?) (?P<action>[A-Z]+?) (?P<data2>.*)")
                 
@@ -273,17 +277,32 @@ class Bot:
                 except:
                     tags = None
                 
-                action = m.group("action")
-                data = m.group("data")
-                data2 = m.group("data2")
+                try:
+                    action = m.group("action")
+                except:
+                    action = None
+                    
+                try:
+                    data = m.group("data")
+                except:
+                    data = None
+                    
+                try:
+                    data2 = m.group("data2")
+                except:
+                    data2 = None
                 
             except:
                 pass
+                
             else:
                 
                 try:
+					if not action:
+						continue
+					
                     if action == "PING":
-                        yield from self._pong(data)
+                        yield from self._pong(data2)
                         
                     elif action == "PRIVMSG":
                         sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
