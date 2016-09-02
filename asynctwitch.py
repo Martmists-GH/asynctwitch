@@ -298,9 +298,9 @@ class Bot:
             else:
                 
                 try:
-					if not action:
-						continue
-					
+                    if not action:
+                        continue
+                    
                     if action == "PING":
                         yield from self._pong(data2)
                         
