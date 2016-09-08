@@ -139,7 +139,7 @@ class Bot:
         
         self.loop = asyncio.ProactorEventLoop()
         asyncio.set_event_loop(self.loop)
-        self.host = "irc.twitch.tv"
+        self.host = "irc.chat.twitch.tv"
         self.port = 6667
         
         self.admins = admins
@@ -182,7 +182,7 @@ class Bot:
     def say(self, msg):
         """ Send messages """
         if len(msg) > 500:
-            raise Exception("The maximum amount of characters in one message is 1000,"
+            raise Exception("The maximum amount of characters in one message is 500,"
                 " you tried to send {} characters".format(len(msg)))
         
         max = 100 if self.mod else 20
@@ -242,11 +242,8 @@ class Bot:
         
         yield from self._join()
         
-        yield from self.event_ready()
-        
         while True:
-            rdata = (yield from self.reader.read(1024)).decode("utf-8")
-            
+            rdata = (yield from self.reader.readline()).decode("utf-8").strip()
             if not rdata:
                 continue
                 
@@ -579,7 +576,7 @@ class Bot:
         args = {
             "format": "bestaudio/best",
             "noplaylist": True,
-            "audioformat": "mp3",
+            "audioformat": "avi",
             "default_search": "auto",
             "loglevel":"quiet",
             "outtmpl": filename
