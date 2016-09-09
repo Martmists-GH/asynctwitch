@@ -137,7 +137,10 @@ class Bot:
             self.nick = user.lower()
             self.chan = "" + channel.lower()
         
-        self.loop = asyncio.ProactorEventLoop()
+        if os.name == 'nt':
+            self.loop = asyncio.ProactorEventLoop()
+        else:
+            self.loop = asyncio.get_event_loop()
         asyncio.set_event_loop(self.loop)
         self.host = "irc.chat.twitch.tv"
         self.port = 6667
