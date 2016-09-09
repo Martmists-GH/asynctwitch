@@ -154,6 +154,10 @@ class Bot:
         
         self.channel_moderators = []
     
+    def debug(self):
+        for x, y in self.__dict__.items():
+            print(x, y)
+    
     
     def load(self, path):
         """ Loads settings from file """
@@ -161,7 +165,7 @@ class Bot:
         config.read(path)
         self.oauth = config.get("Settings", "oauth", fallback=None)
         self.nick = config.get("Settings", "username", fallback=None)
-        self.chan = "" + config.get("Settings", "channel", fallback="twitch")
+        self.chan = "#" + config.get("Settings", "channel", fallback="twitch")
         self.prefix = config.get("Settings", "prefix", fallback="!")
     
     
@@ -247,6 +251,7 @@ class Bot:
         
         while True:
             rdata = (yield from self.reader.readline()).decode("utf-8").strip()
+            
             if not rdata:
                 continue
                 
@@ -254,13 +259,13 @@ class Bot:
                 
             try:
                 if rdata.startswith("@"):
-                    p = re.compile("@(?P<tags>.*?) (?P<data>.*?) (?P<action>[A-Z]+?) (?P<data2>.*)")
+                    p = re.compile("@(?P<tags>.+?) (?P<data>.+?) (?P<action>[A-Z]+?) (?P<data2>.+)")
                 
                 elif rdata.startswith("PING"):
                     p = re.compile("(?P<action>[A-Z]+?) (?P<data2>.*)")
                 
                 else:
-                    p = re.compile("(?P<data>.*?) (?P<action>[A-Z]+?) (?P<data2>.*)")
+                    p = re.compile("(?P<data>.+?) (?P<action>[A-Z]+?) (?P<data2>.+)")
                 
                 m = p.match(rdata)
                 
@@ -308,7 +313,7 @@ class Bot:
                         sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
                             "@(?P=author).tmi.twitch.tv", data).group("author")
                             
-                        message = re.match("[a-zA-Z0-9_]+ "
+                        message = re.match("#[a-zA-Z0-9_]+ "
                             ":(?P<content>.+)", data2).group("content")
                         
                         messageobj = Message(message, sender, tags)
@@ -329,8 +334,8 @@ class Bot:
                     
                     elif action == "MODE":
                         
-                        m = re.match("[a-zA-Z0-9]+ (?P<mode>[+-])o (?P<user>.+?)", 
-                                     data2)
+                        m = re.match("#[a-zA-Z0-9]+ (?P<mode>[\+\-])o (?P<user>.+?)", 
+                                         data2)
                         mode = m.group("mode")
                         user = m.group("user")
                         
@@ -363,7 +368,7 @@ class Bot:
                         yield from self.event_notice(tags)
                     
                     elif action == "CLEARCHAT":
-                        user = re.match("[a-zA-Z0-9_]+ :(?P<user>.+)", data2).group("user")
+                        user = re.match("#[a-zA-Z0-9_]+ :(?P<user>.+)", data2).group("user")
                         
                         if "ban-duration" in tags.keys():
                             yield from self.event_timeout(user, tags)
@@ -371,7 +376,7 @@ class Bot:
                             yield from self.event_ban(user, tags)
                             
                     elif action == "HOSTTARGET":
-                        m = re.match("[a-zA-Z0-9_]+ :(?P<channel>.+?) (?P<count>[0-9]+)", 
+                        m = re.match("#[a-zA-Z0-9_]+ :(?P<channel>.+?) (?P<count>[0-9\-]*)", 
                                       data2)
                         channel = m.group("channel")
                         viewcount = m.group("count")
@@ -383,7 +388,7 @@ class Bot:
                         
                     elif action == "USERNOTICE":
                         if re.search(":", data2):
-                            message = re.match("[a-zA-Z0-9_]+ :(?P<message>.+?)", 
+                            message = re.match("#[a-zA-Z0-9_]+ :(?P<message>.+?)", 
                                                 data2).group("message")
                         else:
                             message = ""
