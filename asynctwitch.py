@@ -135,7 +135,7 @@ class Bot:
             self.prefix = prefix
             self.oauth = oauth
             self.nick = user.lower()
-            self.chan = "" + channel.lower()
+            self.chan = "#" + channel.lower()
         
         if os.name == 'nt':
             self.loop = asyncio.ProactorEventLoop()
