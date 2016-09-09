@@ -25,7 +25,7 @@ class Message:
         self.content = m
         self.author = a
         self.timestamp = datetime.datetime.utcnow()
-        self.__str__ = content
+        self.__str__ = m
     
     
     
@@ -236,9 +236,9 @@ class Bot:
         """ Allows for more events """
         self.writer.write(bytes("CAP REQ :twitch.tv/%s\r\n" % mode,"UTF-8"))
     
-   
-
-    # The following are Twitch commands, such as /me, /ban and /host
+	
+	
+    # The following are Twitch commands, such as /me, /ban and /host, so I'm not going to put docstrings on these
     
     # TODO Commands: 
     # /cheerbadge /commercial

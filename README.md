@@ -73,3 +73,4 @@ You will also need the requirements for `bot.play_file`
 
 
 These examples use the `async/await` syntax added in python 3.5, to use this code in 3.4 use `@asyncio.coroutine` and `yield from` instead.
+THIS DOES NOT WORK WITH PYTHON VERSIONS BELOW 3.4!
