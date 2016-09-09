@@ -25,6 +25,7 @@ class Message:
         self.content = m
         self.author = a
         self.timestamp = datetime.datetime.utcnow()
+        self.__str__ = content
     
     
     
@@ -135,7 +136,7 @@ class Bot:
             self.prefix = prefix
             self.oauth = oauth
             self.nick = user.lower()
-            self.chan = "#" + channel.lower()
+            self.chan = "#" + channel.lower().strip('#')
         
         if os.name == 'nt':
             self.loop = asyncio.ProactorEventLoop()
@@ -147,7 +148,7 @@ class Bot:
         
         self.admins = admins
         
-        self.mod = False
+        self.is_mod = False
         
         self.message_count = 0
         
@@ -191,8 +192,11 @@ class Bot:
         if len(msg) > 500:
             raise Exception("The maximum amount of characters in one message is 500,"
                 " you tried to send {} characters".format(len(msg)))
+                
+        while msg.startswith("."): # Use Bot.ban, Bot.timeout, etc instead
+            msg = msg[1:]
         
-        max = 100 if self.mod else 20
+        max = 100 if self.is_mod else 20
         
         while self.message_count == max:
             yield from asyncio.sleep(1)
@@ -232,6 +236,91 @@ class Bot:
         """ Allows for more events """
         self.writer.write(bytes("CAP REQ :twitch.tv/%s\r\n" % mode,"UTF-8"))
     
+   
+
+    # The following are Twitch commands, such as /me, /ban and /host
+    
+    # TODO Commands: 
+    # /cheerbadge /commercial
+    
+    @asyncio.coroutine
+    def ban(self, user, reason=''):
+        self.writer.write(bytes("PRIVMSG %s :.ban %s %s\r\n" % (self.chan, user, reason), "UTF-8"))
+        
+    @asyncio.coroutine
+    def unban(self, user):
+        self.writer.write(bytes("PRIVMSG %s :.unban %s\r\n" % (self.chan, user), "UTF-8"))
+        
+    @asyncio.coroutine
+    def timeout(self, user, seconds=600, reason=''):
+        self.writer.write(bytes("PRIVMSG %s :.timeout %s %s %s\r\n" % (self.chan, user, 
+                                                                       seconds, reason), "UTF-8"))
+    
+    @asyncio.coroutine
+    def me(self, text):
+        self.writer.write(bytes("PRIVMSG %s :.me %s\r\n" % (self.chan, text), "UTF-8"))
+        
+    @asyncio.coroutine
+    def whisper(self, user, msg):
+        self.writer.write(bytes("PRIVMSG %s :.w %s %s\r\n" % (self.chan, user, msg), "UTF-8"))
+    
+    @asyncio.coroutine
+    def color(self, user, msg):
+        self.writer.write(bytes("PRIVMSG %s :.w %s %s\r\n" % (self.chan, user, msg), "UTF-8"))
+    
+    @asyncio.coroutine
+    def mod(self, user):
+        self.writer.write(bytes("PRIVMSG %s :.mod %s\r\n" % (self.chan, user), "UTF-8"))
+        
+    @asyncio.coroutine
+    def unmod(self, user):
+        self.writer.write(bytes("PRIVMSG %s :.unmod %s\r\n" % (self.chan, user), "UTF-8"))
+        
+    @asyncio.coroutine
+    def clear(self):
+        self.writer.write(bytes("PRIVMSG %s :.clear\r\n" % (self.chan), "UTF-8"))
+        
+    @asyncio.coroutine
+    def subscribers_on(self):
+        self.writer.write(bytes("PRIVMSG %s :.subscribers\r\n" % (self.chan), "UTF-8"))
+
+    @asyncio.coroutine
+    def subscribers_off(self):
+        self.writer.write(bytes("PRIVMSG %s :.subscribersoff\r\n" % (self.chan), "UTF-8"))
+        
+    @asyncio.coroutine
+    def slow_on(self):
+        self.writer.write(bytes("PRIVMSG %s :.slow\r\n" % (self.chan), "UTF-8"))
+
+    @asyncio.coroutine
+    def slow_off(self):
+        self.writer.write(bytes("PRIVMSG %s :.slowoff\r\n" % (self.chan), "UTF-8"))
+        
+    @asyncio.coroutine
+    def r9k_on(self):
+        self.writer.write(bytes("PRIVMSG %s :.r9k\r\n" % (self.chan), "UTF-8"))
+
+    @asyncio.coroutine
+    def r9k_off(self):
+        self.writer.write(bytes("PRIVMSG %s :.r9koff\r\n" % (self.chan), "UTF-8"))
+        
+    @asyncio.coroutine
+    def emote_only_on(self):
+        self.writer.write(bytes("PRIVMSG %s :.emoteonly\r\n" % (self.chan), "UTF-8"))
+
+    @asyncio.coroutine
+    def emote_only_on(self):
+        self.writer.write(bytes("PRIVMSG %s :.emoteonlyoff\r\n" % (self.chan), "UTF-8"))
+        
+    @asyncio.coroutine
+    def host(self, user):
+        self.writer.write(bytes("PRIVMSG %s :.host %s\r\n" % (self.chan, user), "UTF-8"))
+
+    @asyncio.coroutine
+    def unhost(self):
+        self.writer.write(bytes("PRIVMSG %s :.unhost\r\n" % (self.chan), "UTF-8"))
+        
+    # End of Twitch commands
     
     @asyncio.coroutine
     def _tcp_echo_client(self):
@@ -243,7 +332,7 @@ class Bot:
         yield from self._pass()
         yield from self._nick()
         
-        modes = ["commands","tags","membership"]
+        modes = ("commands","tags","membership")
         for m in modes:
             yield from self._special(m)
         
@@ -355,9 +444,9 @@ class Bot:
                             continue
                             
                         if tags["mod"] == 1:
-                            self.mod = True
+                            self.is_mod = True
                         else:
-                            self.mod = False
+                            self.is_mod = False
                             
                         yield from self.event_userstate(tags)
                     
