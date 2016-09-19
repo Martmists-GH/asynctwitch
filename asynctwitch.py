@@ -127,7 +127,7 @@ class Bot:
     """ Bot class without command support """
     
     def __init__(self, *, oauth=None, user=None, channel="twitch", 
-                 prefix="!", admins=[], config=None):
+                 prefix="!", admins=[], config=None, cache=100):
         
         if config:
             self.load(config)
@@ -142,6 +142,9 @@ class Bot:
             self.loop = asyncio.ProactorEventLoop()
         else:
             self.loop = asyncio.get_event_loop()
+        
+        self.cache_length = cache
+        
         asyncio.set_event_loop(self.loop)
         self.host = "irc.chat.twitch.tv"
         self.port = 6667
@@ -150,9 +153,9 @@ class Bot:
         
         self.is_mod = False
         
-        self.message_count = 0
+        self.message_count = 1 # Just in case some get sent almost simultaneously
         
-        
+        self.messages = []
         self.channel_moderators = []
     
     def debug(self):
@@ -189,6 +192,8 @@ class Bot:
     @asyncio.coroutine
     def say(self, msg):
         """ Send messages """
+        msg = str(msg)
+        
         if len(msg) > 500:
             raise Exception("The maximum amount of characters in one message is 500,"
                 " you tried to send {} characters".format(len(msg)))
@@ -236,8 +241,12 @@ class Bot:
         """ Allows for more events """
         self.writer.write(bytes("CAP REQ :twitch.tv/%s\r\n" % mode,"UTF-8"))
     
-	
-	
+    @asyncio.coroutine
+    def _cache(self, message):
+        self.messages.append(message)
+        if len(self.messages) > self.cache_length:
+            self.messages.pop(0)
+    
     # The following are Twitch commands, such as /me, /ban and /host, so I'm not going to put docstrings on these
     
     # TODO Commands: 
@@ -262,6 +271,7 @@ class Bot:
         
     @asyncio.coroutine
     def whisper(self, user, msg):
+		msg = str(msg)
         self.writer.write(bytes("PRIVMSG %s :.w %s %s\r\n" % (self.chan, user, msg), "UTF-8"))
     
     @asyncio.coroutine
@@ -407,7 +417,22 @@ class Bot:
                         
                         messageobj = Message(message, sender, tags)
                         
+                        yield from self._cache(messageobj)
+                        
                         yield from self.event_message(messageobj)
+                        
+                    elif action == "WHISPER":
+                        sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
+                            "@(?P=author).tmi.twitch.tv", data).group("author")
+                            
+                        message = re.match("[a-zA-Z0-9_]+ "
+                            ":(?P<content>.+)", data2).group("content")
+                        
+                        messageobj = Message(message, sender, tags)
+                        
+                        yield from self._cache(messageobj)
+                        
+                        yield from self.event_private_message(messageobj)
                     
                     elif action == "JOIN":
                         sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
@@ -497,6 +522,7 @@ class Bot:
                 except Exception as e:
                     yield from self.parse_error(e)
     
+    # Events called by TCP connection
     
     @asyncio.coroutine
     def event_subscribe(self, user, message, tags):
@@ -614,12 +640,17 @@ class Bot:
         """ Called when a user is opped """
         pass
     
+    @asyncio.coroutine
+    def event_private_message(self, rm):
+        """ Called on a private message """
+        pass
     
     @asyncio.coroutine
     def event_message(self, rm):
         """ Called when a message is sent """
         pass
     
+    # End of events
     
     @asyncio.coroutine
     def stop(self, exit=False):
@@ -627,6 +658,9 @@ class Bot:
         Stops the bot and disables using it again.
         Useful for a restart command I guess
         """
+        
+        # Broken?
+        
         if hasattr(self, "player"):
             self.player.terminate()
         self.loop.stop()
