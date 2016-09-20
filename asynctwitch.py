@@ -10,6 +10,8 @@ import json
 import configparser
 import datetime
 import subprocess
+import functools
+import pprint
     
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding=sys.stdout.encoding, 
                               errors="backslashreplace", line_buffering=True)
@@ -30,8 +32,20 @@ def ratelimit_wrapper(coro):
         self.message_count -= 1
         return r
     return wrapper
-	
-	
+    
+    
+class Song:
+    def __init__(self):
+        pass
+        
+    def setattrs(self, obj):
+        attrs = ['dislike_count', 'like_count', 'title', 'duration', 'uploader', 'description', 'categories', 'view_count', 'thumbnail', 'id', 'is_live']
+        for attr in attrs:
+            try:
+                setattr(self, attr, obj[attr])
+            except:
+                pass
+    
 class Message:
     """ Custom message object to combine message, author and timestamp """
     
@@ -167,7 +181,9 @@ class Bot:
         
         self.admins = admins
         
+        self.song = Song()
         self.is_mod = False
+        self.is_playing = False
         
         self.message_count = 1 # Just in case some get sent almost simultaneously
         
@@ -378,6 +394,7 @@ class Bot:
             rdata = (yield from self.reader.readline()).decode("utf-8").strip()
             
             if not rdata:
+                yield from asyncio.sleep(1)
                 continue
                 
             yield from self.raw_event(rdata)
@@ -704,6 +721,9 @@ class Bot:
         For this to work, ffplay, ffmpeg and ffprobe, downloadable from the ffmpeg website,
         have to be in the same folder as the bot OR added to path.
         """
+        if self.is_playing:
+            raise Exception("Already playing a song!")
+        self.is_playing = True
         
         j = yield from self.loop.run_in_executor(None, subprocess.check_output, 
                                                  [
@@ -719,6 +739,9 @@ class Bot:
                                                                 stderr=asyncio.subprocess.DEVNULL)
                                                                 
         yield from asyncio.sleep( math.ceil( float( j["format"]["duration"] )) + 2)
+        
+        self.is_playing = False
+        
         return True
     
     
@@ -728,6 +751,9 @@ class Bot:
         Requires youtube_dl to be installed
         `pip install youtube_dl`
         """
+        if self.is_playing:
+            raise Exception("Already playing a song!")
+        
         import youtube_dl
         
         args = {
@@ -735,13 +761,21 @@ class Bot:
             "noplaylist": True,
             "audioformat": "avi",
             "default_search": "auto",
-            "loglevel":"quiet",
+            "noprogress": True,
             "outtmpl": filename
         }
         args.update(options)
         ytdl = youtube_dl.YoutubeDL(args)
-        yield from self.loop.run_in_executor(None, ytdl.download, ([query]))
+        func = functools.partial(ytdl.extract_info, query)
+        info = yield from self.loop.run_in_executor(None, func)
+        try:
+            info = info['entries'][0]
+        except:
+            pass
+        self.song = Song()
+        self.song.setattrs(info)
         yield from self.play_file(filename)
+        self.song = Song()
         if cleanup:
             os.remove(filename)
     
