@@ -10,12 +10,9 @@ import json
 import configparser
 import datetime
 import subprocess
+import threading
 import functools
 import pprint
-    
-sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding=sys.stdout.encoding, 
-                              errors="backslashreplace", line_buffering=True)
-# fix unicode characters breaking the bot on windows
     
     
 def ratelimit_wrapper(coro):
@@ -39,13 +36,20 @@ class Song:
         pass
         
     def setattrs(self, obj):
-        attrs = ['dislike_count', 'like_count', 'title', 'duration', 'uploader', 'description', 'categories', 'view_count', 'thumbnail', 'id', 'is_live']
-        for attr in attrs:
-            try:
-                setattr(self, attr, obj[attr])
-            except:
-                pass
-    
+        self.likes = obj['like_count']
+        self.dislikes = obj['dislike_count']
+        self.title = obj['title']
+        self.duration = obj['duration']
+        self.uploader = obj['uploader']
+        self.description = obj['description']
+        self.categories = obj['categories']
+        self.views = obj['view_count']
+        self.thumbnail = obj['thumbnail']
+        self.id = obj['id']
+        self.is_live = obj['is_live']
+    def __str__(self):
+        return self.title
+            
 class Message:
     """ Custom message object to combine message, author and timestamp """
     
@@ -56,7 +60,8 @@ class Message:
         self.content = m
         self.author = a
         self.timestamp = datetime.datetime.utcnow()
-        self.__str__ = m
+    def __str__(self):
+        return self.content
     
     
 class Command:
@@ -217,7 +222,7 @@ class Bot:
     @asyncio.coroutine
     def _pong(self, src):
         """ Tell remote we"re still alive """
-        self.writer.write(bytes("PONG %s\r\n" % src, "UTF-8"))
+        self.writer.write("PONG {}\r\n".format(src).encode('utf-8'))
     
     @ratelimit_wrapper
     @asyncio.coroutine
@@ -232,37 +237,37 @@ class Bot:
         while msg.startswith("."): # Use Bot.ban, Bot.timeout, etc instead
             msg = msg[1:]
         
-        self.writer.write(bytes("PRIVMSG %s :%s\r\n" % (self.chan, msg), "UTF-8"))
+        self.writer.write("PRIVMSG {} :{}\r\n".format(self.chan, msg).encode('utf-8'))
     
 
     @asyncio.coroutine
     def _nick(self):
         """ Send name """
-        self.writer.write(bytes("NICK %s\r\n" % self.nick, "UTF-8"))
+        self.writer.write("NICK {}\r\n".format(self.nick).encode('utf-8'))
     
 
     @asyncio.coroutine
     def _pass(self):
         """ Send oauth token """
-        self.writer.write(bytes("PASS %s\r\n" % self.oauth, "UTF-8"))
+        self.writer.write("PASS {}\r\n".format(self.oauth).encode('utf-8'))
     
     
     @asyncio.coroutine
     def _join(self):
         """ Join a channel """
-        self.writer.write(bytes("JOIN %s\r\n" % self.chan, "UTF-8"))
+        self.writer.write("JOIN {}\r\n".format(self.chan).encode('utf-8'))
     
 
     @asyncio.coroutine
     def _part(self):
         """ Leave a channel """
-        self.writer.write(bytes("PART %s\r\n" % self.chan, "UTF-8"))
+        self.writer.write("PART {}\r\n".format(self.chan).encode('utf-8'))
     
 
     @asyncio.coroutine
     def _special(self, mode):
         """ Allows for more events """
-        self.writer.write(bytes("CAP REQ :twitch.tv/%s\r\n" % mode,"UTF-8"))
+        self.writer.write(bytes("CAP REQ :twitch.tv/{}\r\n".format(mode),"UTF-8"))
     
     @asyncio.coroutine
     def _cache(self, message):
@@ -278,99 +283,99 @@ class Bot:
     @ratelimit_wrapper
     @asyncio.coroutine
     def ban(self, user, reason=''):
-        self.writer.write(bytes("PRIVMSG %s :.ban %s %s\r\n" % (self.chan, user, reason), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.ban {} {}\r\n".format(self.chan, user, reason).encode('utf-8'))
     
     @ratelimit_wrapper    
     @asyncio.coroutine
     def unban(self, user):
-        self.writer.write(bytes("PRIVMSG %s :.unban %s\r\n" % (self.chan, user), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.unban {}\r\n".format(self.chan, user).encode('utf-8'))
      
     @ratelimit_wrapper
     @asyncio.coroutine
     def timeout(self, user, seconds=600, reason=''):
-        self.writer.write(bytes("PRIVMSG %s :.timeout %s %s %s\r\n" % (self.chan, user, 
+        self.writer.write(bytes("PRIVMSG {} :.timeout {} {} {}\r\n".format(self.chan, user, 
                                                                        seconds, reason), "UTF-8"))
     
     @ratelimit_wrapper
     @asyncio.coroutine
     def me(self, text):
-        self.writer.write(bytes("PRIVMSG %s :.me %s\r\n" % (self.chan, text), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.me {}\r\n".format(self.chan, text).encode('utf-8'))
         
     @ratelimit_wrapper
     @asyncio.coroutine
     def whisper(self, user, msg):
         msg = str(msg)
-        self.writer.write(bytes("PRIVMSG %s :.w %s %s\r\n" % (self.chan, user, msg), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.w {} {}\r\n".format(self.chan, user, msg).encode('utf-8'))
     
     @ratelimit_wrapper
     @asyncio.coroutine
     def color(self, user, msg):
-        self.writer.write(bytes("PRIVMSG %s :.w %s %s\r\n" % (self.chan, user, msg), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.w {} {}\r\n".format(self.chan, user, msg).encode('utf-8'))
     
     @ratelimit_wrapper
     @asyncio.coroutine
     def mod(self, user):
-        self.writer.write(bytes("PRIVMSG %s :.mod %s\r\n" % (self.chan, user), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.mod {}\r\n".format(self.chan, user).encode('utf-8'))
     
     @ratelimit_wrapper
     @asyncio.coroutine
     def unmod(self, user):
-        self.writer.write(bytes("PRIVMSG %s :.unmod %s\r\n" % (self.chan, user), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.unmod {}\r\n".format(self.chan, user).encode('utf-8'))
         
     @ratelimit_wrapper
     @asyncio.coroutine
     def clear(self):
-        self.writer.write(bytes("PRIVMSG %s :.clear\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.clear\r\n".format(self.chan).encode('utf-8'))
         
     @ratelimit_wrapper
     @asyncio.coroutine
     def subscribers_on(self):
-        self.writer.write(bytes("PRIVMSG %s :.subscribers\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.subscribers\r\n".format(self.chan).encode('utf-8'))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def subscribers_off(self):
-        self.writer.write(bytes("PRIVMSG %s :.subscribersoff\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.subscribersoff\r\n".format(self.chan).encode('utf-8'))
         
     @ratelimit_wrapper
     @asyncio.coroutine
     def slow_on(self):
-        self.writer.write(bytes("PRIVMSG %s :.slow\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.slow\r\n".format(self.chan).encode('utf-8'))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def slow_off(self):
-        self.writer.write(bytes("PRIVMSG %s :.slowoff\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.slowoff\r\n".format(self.chan).encode('utf-8'))
     
     @ratelimit_wrapper    
     @asyncio.coroutine
     def r9k_on(self):
-        self.writer.write(bytes("PRIVMSG %s :.r9k\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.r9k\r\n".format(self.chan).encode('utf-8'))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def r9k_off(self):
-        self.writer.write(bytes("PRIVMSG %s :.r9koff\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.r9koff\r\n".format(self.chan).encode('utf-8'))
         
     @ratelimit_wrapper
     @asyncio.coroutine
     def emote_only_on(self):
-        self.writer.write(bytes("PRIVMSG %s :.emoteonly\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.emoteonly\r\n".format(self.chan).encode('utf-8'))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def emote_only_on(self):
-        self.writer.write(bytes("PRIVMSG %s :.emoteonlyoff\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.emoteonlyoff\r\n".format(self.chan).encode('utf-8'))
         
     @ratelimit_wrapper
     @asyncio.coroutine
     def host(self, user):
-        self.writer.write(bytes("PRIVMSG %s :.host %s\r\n" % (self.chan, user), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.host {}\r\n".format(self.chan, user).encode('utf-8'))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def unhost(self):
-        self.writer.write(bytes("PRIVMSG %s :.unhost\r\n" % (self.chan), "UTF-8"))
+        self.writer.write("PRIVMSG {} :.unhost\r\n".format(self.chan).encode('utf-8'))
         
     # End of Twitch commands
     
@@ -646,12 +651,6 @@ class Bot:
         }
         """
         pass
-       
-    
-    @asyncio.coroutine
-    def event_ready(self):
-        """ Called when the bot is ready for use """
-        pass
     
     
     @asyncio.coroutine
@@ -713,7 +712,16 @@ class Bot:
         if exit:
             os._exit(0)
     
-    
+    @asyncio.coroutine
+    def _actually_play(self, file, t):
+        yield from asyncio.create_subprocess_exec("ffplay", "-nodisp", "-autoexit", "-v", "-8", 
+                                                  file, stdout=asyncio.subprocess.DEVNULL, 
+                                                        stderr=asyncio.subprocess.DEVNULL)
+        yield from asyncio.sleep(t)
+        self.is_playing = False
+        self.song = Song()
+        os.remove(file)
+        
     @asyncio.coroutine
     def play_file(self, file):
         """
@@ -732,21 +740,12 @@ class Bot:
                                                  ])
         
         j = json.loads(j.decode().strip())
-        
-        self.player = yield from asyncio.create_subprocess_exec("ffplay", "-nodisp", "-autoexit", 
-                                                                "-v", "-8", file, 
-                                                                stdout=asyncio.subprocess.DEVNULL, 
-                                                                stderr=asyncio.subprocess.DEVNULL)
-                                                                
-        yield from asyncio.sleep( math.ceil( float( j["format"]["duration"] )) + 2)
-        
-        self.is_playing = False
-        
-        return True
+        t = math.ceil( float( j["format"]["duration"] ) ) + 2
+        self.player = asyncio.ensure_future(self._actually_play(file, t))
     
     
     @asyncio.coroutine
-    def play_ytdl(self, query, *, filename="song.mp3", cleanup=True, options={}):
+    def play_ytdl(self, query, *, filename="song.avi", options={}):
         """
         Requires youtube_dl to be installed
         `pip install youtube_dl`
@@ -775,9 +774,6 @@ class Bot:
         self.song = Song()
         self.song.setattrs(info)
         yield from self.play_file(filename)
-        self.song = Song()
-        if cleanup:
-            os.remove(filename)
     
     
     @asyncio.coroutine
