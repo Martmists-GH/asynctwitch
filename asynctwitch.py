@@ -15,6 +15,23 @@ sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding=sys.stdout.encoding,
                               errors="backslashreplace", line_buffering=True)
 # fix unicode characters breaking the bot on windows
     
+    
+def ratelimit_wrapper(coro):
+    @asyncio.coroutine
+    def wrapper(self, *args, **kwargs):
+        max = 100 if self.is_mod else 20
+        
+        while self.message_count == max:
+            yield from asyncio.sleep(1)
+            
+        self.message_count += 1
+        r = yield from coro(self, *args, **kwargs)
+        yield from asyncio.sleep(30)
+        self.message_count -= 1
+        return r
+    return wrapper
+	
+	
 class Message:
     """ Custom message object to combine message, author and timestamp """
     
@@ -26,7 +43,6 @@ class Message:
         self.author = a
         self.timestamp = datetime.datetime.utcnow()
         self.__str__ = m
-    
     
     
 class Command:
@@ -162,7 +178,6 @@ class Bot:
         for x, y in self.__dict__.items():
             print(x, y)
     
-    
     def load(self, path):
         """ Loads settings from file """
         config = configparser.ConfigParser(interpolation=None)
@@ -188,7 +203,7 @@ class Bot:
         """ Tell remote we"re still alive """
         self.writer.write(bytes("PONG %s\r\n" % src, "UTF-8"))
     
-
+    @ratelimit_wrapper
     @asyncio.coroutine
     def say(self, msg):
         """ Send messages """
@@ -201,15 +216,7 @@ class Bot:
         while msg.startswith("."): # Use Bot.ban, Bot.timeout, etc instead
             msg = msg[1:]
         
-        max = 100 if self.is_mod else 20
-        
-        while self.message_count == max:
-            yield from asyncio.sleep(1)
-        
-        self.message_count += 1
-        self.writer.write(bytes("PRIVMSG %s :%s\r\n" % (self.chan, str(msg)), "UTF-8"))
-        yield from asyncio.sleep(30)
-        self.message_count -= 1
+        self.writer.write(bytes("PRIVMSG %s :%s\r\n" % (self.chan, msg), "UTF-8"))
     
 
     @asyncio.coroutine
@@ -252,80 +259,99 @@ class Bot:
     # TODO Commands: 
     # /cheerbadge /commercial
     
+    @ratelimit_wrapper
     @asyncio.coroutine
     def ban(self, user, reason=''):
         self.writer.write(bytes("PRIVMSG %s :.ban %s %s\r\n" % (self.chan, user, reason), "UTF-8"))
-        
+    
+    @ratelimit_wrapper    
     @asyncio.coroutine
     def unban(self, user):
         self.writer.write(bytes("PRIVMSG %s :.unban %s\r\n" % (self.chan, user), "UTF-8"))
-        
+     
+    @ratelimit_wrapper
     @asyncio.coroutine
     def timeout(self, user, seconds=600, reason=''):
         self.writer.write(bytes("PRIVMSG %s :.timeout %s %s %s\r\n" % (self.chan, user, 
                                                                        seconds, reason), "UTF-8"))
     
+    @ratelimit_wrapper
     @asyncio.coroutine
     def me(self, text):
         self.writer.write(bytes("PRIVMSG %s :.me %s\r\n" % (self.chan, text), "UTF-8"))
         
+    @ratelimit_wrapper
     @asyncio.coroutine
     def whisper(self, user, msg):
-		msg = str(msg)
+        msg = str(msg)
         self.writer.write(bytes("PRIVMSG %s :.w %s %s\r\n" % (self.chan, user, msg), "UTF-8"))
     
+    @ratelimit_wrapper
     @asyncio.coroutine
     def color(self, user, msg):
         self.writer.write(bytes("PRIVMSG %s :.w %s %s\r\n" % (self.chan, user, msg), "UTF-8"))
     
+    @ratelimit_wrapper
     @asyncio.coroutine
     def mod(self, user):
         self.writer.write(bytes("PRIVMSG %s :.mod %s\r\n" % (self.chan, user), "UTF-8"))
-        
+    
+    @ratelimit_wrapper
     @asyncio.coroutine
     def unmod(self, user):
         self.writer.write(bytes("PRIVMSG %s :.unmod %s\r\n" % (self.chan, user), "UTF-8"))
         
+    @ratelimit_wrapper
     @asyncio.coroutine
     def clear(self):
         self.writer.write(bytes("PRIVMSG %s :.clear\r\n" % (self.chan), "UTF-8"))
         
+    @ratelimit_wrapper
     @asyncio.coroutine
     def subscribers_on(self):
         self.writer.write(bytes("PRIVMSG %s :.subscribers\r\n" % (self.chan), "UTF-8"))
 
+    @ratelimit_wrapper
     @asyncio.coroutine
     def subscribers_off(self):
         self.writer.write(bytes("PRIVMSG %s :.subscribersoff\r\n" % (self.chan), "UTF-8"))
         
+    @ratelimit_wrapper
     @asyncio.coroutine
     def slow_on(self):
         self.writer.write(bytes("PRIVMSG %s :.slow\r\n" % (self.chan), "UTF-8"))
 
+    @ratelimit_wrapper
     @asyncio.coroutine
     def slow_off(self):
         self.writer.write(bytes("PRIVMSG %s :.slowoff\r\n" % (self.chan), "UTF-8"))
-        
+    
+    @ratelimit_wrapper    
     @asyncio.coroutine
     def r9k_on(self):
         self.writer.write(bytes("PRIVMSG %s :.r9k\r\n" % (self.chan), "UTF-8"))
 
+    @ratelimit_wrapper
     @asyncio.coroutine
     def r9k_off(self):
         self.writer.write(bytes("PRIVMSG %s :.r9koff\r\n" % (self.chan), "UTF-8"))
         
+    @ratelimit_wrapper
     @asyncio.coroutine
     def emote_only_on(self):
         self.writer.write(bytes("PRIVMSG %s :.emoteonly\r\n" % (self.chan), "UTF-8"))
 
+    @ratelimit_wrapper
     @asyncio.coroutine
     def emote_only_on(self):
         self.writer.write(bytes("PRIVMSG %s :.emoteonlyoff\r\n" % (self.chan), "UTF-8"))
         
+    @ratelimit_wrapper
     @asyncio.coroutine
     def host(self, user):
         self.writer.write(bytes("PRIVMSG %s :.host %s\r\n" % (self.chan, user), "UTF-8"))
 
+    @ratelimit_wrapper
     @asyncio.coroutine
     def unhost(self):
         self.writer.write(bytes("PRIVMSG %s :.unhost\r\n" % (self.chan), "UTF-8"))
