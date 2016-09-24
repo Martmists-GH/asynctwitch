@@ -1,8 +1,6 @@
 import asyncio
 import traceback
-import sys
 import os
-import io
 import re
 import inspect
 import math
@@ -10,10 +8,18 @@ import json
 import configparser
 import datetime
 import subprocess
-import threading
 import functools
-import pprint
+import time
     
+import requests
+    
+def create_timer(message, time):
+    @asyncio.coroutine
+    def wrapper(self):
+        while True:
+            yield from asyncio.sleep(time)
+            yield from self.say(message)
+    return wrapper
     
 def ratelimit_wrapper(coro):
     @asyncio.coroutine
@@ -183,6 +189,7 @@ class Bot:
         asyncio.set_event_loop(self.loop)
         self.host = "irc.chat.twitch.tv"
         self.port = 6667
+        self.client_id = 'oma22vs6kpfr8aklfcmrvawfr4ct8lj'
         
         self.admins = admins
         
@@ -191,6 +198,15 @@ class Bot:
         self.is_playing = False
         
         self.message_count = 1 # Just in case some get sent almost simultaneously
+        
+        self.channel_stats = {}
+        
+        self.viewer_count = 0
+        self.host_count = 0
+        
+        self.viewers = {}
+        
+        self.hosts = []
         
         self.messages = []
         self.channel_moderators = []
@@ -209,14 +225,55 @@ class Bot:
         self.prefix = config.get("Settings", "prefix", fallback="!")
     
     
-    def override(self, func):
+    def override(self, coro):
         """ Allows for overriding certain functions """
-        setattr(self, func.__name__, func)
+        if not 'event' in coro.__name__:
+            raise Exception("Accepted overrides start with 'event_' or 'raw_event'")
+        setattr(self, coro.__name__, coro)
     
+    @asyncio.coroutine
+    def _get_stats(self):
+        """ Gets JSON from the Kraken API """
+        # There should be a better way to do this
+        while True:
+            func = functools.partial(requests.get, 'https://api.twitch.tv/kraken/channels/{}?client_id={}'.format(self.chan[1:], self.client_id))
+            j = (yield from self.loop.run_in_executor(None, func)).json()
+            self.channel_stats = {
+                'mature':j['mature'],
+                'title':j['status'],
+                'game':j['game'],
+                'id':j['_id'],
+                'created_at':time.mktime(time.strptime(j['created_at'], '%Y-%m-%dT%H:%M:%SZ')),
+                'updated_at':time.mktime(time.strptime(j['updated_at'], '%Y-%m-%dT%H:%M:%SZ')),
+                'delay':j['delay'],
+                'offline_logo':j['video_banner'],
+                'profile_picture':j['logo'],
+                'profile_banner':j['profile_banner'],
+                'twitch_partner': j['partner'],
+                'views':j['views'],
+                'followers':j['followers']
+            }
+            
+            func = functools.partial(requests.get, 'https://tmi.twitch.tv/hosts?target={}&include_logins=1'.format(j['_id']))
+            j = (yield from self.loop.run_in_executor(None, func)).json()
+            self.host_count = len(j['hosts'])
+            self.hosts = [x['host_login'] for x in j['hosts']]
+            
+            func = functools.partial(requests.get, 'https://tmi.twitch.tv/group/user/{}/chatters'.format(self.chan[1:]))
+            j = (yield from self.loop.run_in_executor(None, func)).json()
+            self.viewer_count = j['chatter_count']
+            self.channel_moderators = j['chatters']['moderators']
+            self.viewers['viewers'] = j['chatters']['viewers']
+            self.viewers['moderators'] = j['chatters']['moderators']
+            self.viewers['staff'] = j['chatters']['staff']
+            self.viewers['admins'] = j['chatters']['admins']
+            self.viewers['global_moderators'] = j['chatters']['global_mods']
+            
+            yield from asyncio.sleep(120)
     
     def start(self):
         """ Starts the event loop, this blocks all other code below it from executing """
-        
+        self.loop.create_task(self._get_stats())
         self.loop.run_until_complete(self._tcp_echo_client())
     
     @asyncio.coroutine
@@ -496,20 +553,14 @@ class Bot:
                     
                     elif action == "MODE":
                         
-                        m = re.match("#[a-zA-Z0-9]+ (?P<mode>[\+\-])o (?P<user>.+?)", 
+                        m = re.match("#[a-zA-Z0-9]+ (?P<mode>[\+\-])o (?P<user>.+)", 
                                          data2)
                         mode = m.group("mode")
                         user = m.group("user")
                         
                         if mode == "+":
-                            self.channel_moderators.append(user)
                             yield from self.event_user_op(user)
                         else:
-                            [
-                                self.channel_moderators.pop(x) for x, u in 
-                                enumerate(self.channel_moderators) if u == user
-                            ]
-                             
                             yield from self.event_user_deop(user)
                     
                     elif action == "USERSTATE":
@@ -824,12 +875,14 @@ class CommandBot(Bot):
                     yield from c.run(rm)
                     break
     
-    
     def command(self, *args, **kwargs):
         """ Add a command """
         
         return Command(self, *args, **kwargs)
     
+    def add_timer(self, message, time=60):
+        t = create_timer(message, time)
+        self.loop.create_task(t(self))
     
     @asyncio.coroutine
     def play_list(self, l):

@@ -10,7 +10,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     name='asynctwitch',
 
-    version='3.0.0',
+    version='3.1.0',
 
     description='Asynchonous wrapper for twitch IRC3',
     long_description=long_description,
@@ -32,6 +32,9 @@ setup(
 
         'Programming Language :: Python :: 3.4+',
     ],
+	install_requires=[
+		'requests'
+	]
     keywords='asynchronous twitch bot library with built-in (optional) commands system',
     py_modules=["asynctwitch"]
 )
