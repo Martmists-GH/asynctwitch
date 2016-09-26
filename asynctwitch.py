@@ -846,9 +846,12 @@ class CommandBot(Bot):
         self.playlist = []
         self.playing = None
     
+    @asyncio.coroutine
+    def event_message(self, m):
+        yield from self.parse_commands(m)
     
     @asyncio.coroutine
-    def event_message(self, rm):
+    def parse_commands(self, rm):
         """ Shitty command parser I made """
         
         if rm.content.startswith(self.prefix):
@@ -893,4 +896,3 @@ class CommandBot(Bot):
             song = self.playlist.pop(0)
             self.playing = song
             yield from self.play_ytdl(song)
-    
