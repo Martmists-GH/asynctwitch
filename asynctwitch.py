@@ -13,6 +13,11 @@ import time
     
 import requests
     
+@asyncio.coroutine
+def _decrease_msgcount(self):
+    yield from asyncio.sleep(20)
+    self.message_count -= 1
+    
 def create_timer(message, time):
     @asyncio.coroutine
     def wrapper(self):
@@ -31,8 +36,7 @@ def ratelimit_wrapper(coro):
             
         self.message_count += 1
         r = yield from coro(self, *args, **kwargs)
-        yield from asyncio.sleep(30)
-        self.message_count -= 1
+        asyncio.ensure_future(_decrease_msgcount(self)) # make sure it doesn't block the event loop
         return r
     return wrapper
     
@@ -84,8 +88,9 @@ class Command:
         self.listed = listed
         self.unprefixed = unprefixed
         self.subcommands = []
-        bot.commands.append(self)
-    
+        bot.commands[comm] = self
+        for a in alias:
+            bot.commands[a] = self
     
     def subcommand(self, *args, **kwargs):
         """ Create subcommands """
@@ -458,7 +463,6 @@ class Bot:
             rdata = (yield from self.reader.readline()).decode("utf-8").strip()
             
             if not rdata:
-                yield from asyncio.sleep(1)
                 continue
                 
             yield from self.raw_event(rdata)
@@ -794,7 +798,7 @@ class Bot:
         
         j = json.loads(j.decode().strip())
         t = math.ceil( float( j["format"]["duration"] ) ) + 2
-        self.player = asyncio.ensure_future(self._actually_play(file, t))
+        asyncio.ensure_future(self._actually_play(file, t))
     
     
     @asyncio.coroutine
@@ -844,7 +848,7 @@ class CommandBot(Bot):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.commands = []
+        self.commands = {}
         self.playlist = []
         self.playing = None
     
@@ -863,22 +867,19 @@ class CommandBot(Bot):
             w = cl.pop(0).lower().replace("\r","")
             m = " ".join(cl)
             
-            for c in self.commands:
-                if (w == c.comm or w in c.alias) and not c.unprefixed:
-
-                    if c.admin and not rm.author in self.admins:
+            if w in self.commands:
+                if not self.commands[w].unprefixed:
+                    if self.commands[w].admin and not rm.author in self.admins:
                         yield from bot.say("You are not allowed to use this command")
-                        return
-                    yield from c.run(rm)
+                    yield from self.commands[w].run(rm)
 
         else:
             cl = rm.content.split(" ")
             w = cl.pop(0).lower()
             
-            for c in self.commands:
-                if (w == c.comm or w in c.alias) and c.unprefixed:
-                    yield from c.run(rm)
-                    break
+            if w in self.commands:
+                if not self.commands[w].unprefixed:
+                    yield from self.commands[w].run(rm)
     
     def command(self, *args, **kwargs):
         """ Add a command """
