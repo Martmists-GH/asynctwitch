@@ -223,7 +223,7 @@ class Bot:
         self.nick = config.get("Settings", "username", fallback=None)
         self.chan = "#" + config.get("Settings", "channel", fallback="twitch")
         self.prefix = config.get("Settings", "prefix", fallback="!")
-		self.client_id = config.get("Settings", "client_id", fallback=None)
+        self.client_id = config.get("Settings", "client_id", fallback=None)
     
     
     def override(self, coro):
@@ -274,8 +274,8 @@ class Bot:
     
     def start(self):
         """ Starts the event loop, this blocks all other code below it from executing """
-		if self.client_id is not None:
-			self.loop.create_task(self._get_stats())
+        if self.client_id is not None:
+            self.loop.create_task(self._get_stats())
         self.loop.run_until_complete(self._tcp_echo_client())
     
     @asyncio.coroutine
