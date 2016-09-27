@@ -6,7 +6,7 @@ import inspect
 import math
 import json
 import configparser
-import datetime
+import time
 import subprocess
 import functools
 import time
@@ -62,10 +62,10 @@ class Message:
     def __init__(self, m, a, tags):
         if tags:
             for k, v in tags.items():
-                setattr(self, k, v)
+                setattr(self, k.replace('-','_'), v)
         self.content = m
         self.author = a
-        self.timestamp = datetime.datetime.utcnow()
+        self.timestamp = time.time()
     def __str__(self):
         return self.content
     
@@ -177,7 +177,8 @@ class Bot:
             self.prefix = prefix
             self.oauth = oauth
             self.nick = user.lower()
-            self.chan = "#" + channel.lower().strip('#')
+            self.chan = "#" + channel.lower().strip('#') 
+            self.client_id = client_id
         
         if os.name == 'nt':
             self.loop = asyncio.ProactorEventLoop()
@@ -189,7 +190,6 @@ class Bot:
         asyncio.set_event_loop(self.loop)
         self.host = "irc.chat.twitch.tv"
         self.port = 6667
-        self.client_id = 'oma22vs6kpfr8aklfcmrvawfr4ct8lj'
         
         self.admins = admins
         
@@ -223,6 +223,7 @@ class Bot:
         self.nick = config.get("Settings", "username", fallback=None)
         self.chan = "#" + config.get("Settings", "channel", fallback="twitch")
         self.prefix = config.get("Settings", "prefix", fallback="!")
+		self.client_id = config.get("Settings", "client_id", fallback=None)
     
     
     def override(self, coro):
@@ -273,7 +274,8 @@ class Bot:
     
     def start(self):
         """ Starts the event loop, this blocks all other code below it from executing """
-        self.loop.create_task(self._get_stats())
+		if self.client_id is not None:
+			self.loop.create_task(self._get_stats())
         self.loop.run_until_complete(self._tcp_echo_client())
     
     @asyncio.coroutine
