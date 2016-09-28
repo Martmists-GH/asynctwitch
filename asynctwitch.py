@@ -59,17 +59,31 @@ class Song:
         self.is_live = obj['is_live']
     def __str__(self):
         return self.title
+        
+class Author:
+    """ Custom author class """
+    def __init__(self, a, tags):
+        self.name = a
+        if tags:
+            self.badges = tags['badges']
+            self.color = tags['color']
+            self.mod = tags['mod']
+            self.subscriber = tags['subscriber']
+            self.turbo = tags['turbo']
+            self.id = tags['user-id']
+            self.type = tags['user-type']
             
 class Message:
     """ Custom message object to combine message, author and timestamp """
     
     def __init__(self, m, a, tags):
         if tags:
-            for k, v in tags.items():
-                setattr(self, k.replace('-','_'), v)
+            self.timestamp = tags['tmi-sent-ts']
+            self.emotes = tags['emotes']
+            self.id = tags['id']
+            self.room_id = tags['room-id']
         self.content = m
-        self.author = a
-        self.timestamp = time.time()
+        self.author = Author(a, tags)
     def __str__(self):
         return self.content
     
@@ -860,6 +874,8 @@ class CommandBot(Bot):
     def parse_commands(self, rm):
         """ Shitty command parser I made """
         
+        if self.nick == rm.author.name: return
+		
         if rm.content.startswith(self.prefix):
     
             m = rm.content[len(self.prefix):]
@@ -869,8 +885,8 @@ class CommandBot(Bot):
             
             if w in self.commands:
                 if not self.commands[w].unprefixed:
-                    if self.commands[w].admin and not rm.author in self.admins:
-                        yield from bot.say("You are not allowed to use this command")
+                    if self.commands[w].admin and not rm.author.name in self.admins:
+                        yield from self.say("You are not allowed to use this command")
                     yield from self.commands[w].run(rm)
 
         else:
@@ -883,7 +899,6 @@ class CommandBot(Bot):
     
     def command(self, *args, **kwargs):
         """ Add a command """
-        
         return Command(self, *args, **kwargs)
     
     def add_timer(self, message, time=60):
