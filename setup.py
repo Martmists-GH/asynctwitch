@@ -33,7 +33,7 @@ setup(
         'Programming Language :: Python :: 3.4+',
     ],
 	install_requires=[
-		'requests'
+		'aiohttp'
 	]
     keywords='asynchronous twitch bot library with built-in (optional) commands system',
     py_modules=["asynctwitch"]

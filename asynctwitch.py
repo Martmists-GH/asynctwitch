@@ -1,5 +1,6 @@
 import asyncio
 import traceback
+import sys
 import os
 import re
 import inspect
@@ -8,10 +9,25 @@ import json
 import configparser
 import time
 import subprocess
-import functools
 import time
     
-import requests
+import aiohttp
+    
+@asyncio.coroutine
+def get_url(loop, url):
+    session = aiohttp.ClientSession(loop=loop)
+    with aiohttp.Timeout(10):
+        response = yield from session.get(url)
+        try:
+            # other statements
+            return (yield from response.json())
+        finally:
+            if sys.exc_info()[0] is not None:
+                # on exceptions, close the connection altogether
+                response.close()
+            else:
+                yield from response.release()
+            session.close()
     
 @asyncio.coroutine
 def _decrease_msgcount(self):
@@ -60,7 +76,7 @@ class Song:
     def __str__(self):
         return self.title
         
-class Author:
+class User:
     """ Custom author class """
     def __init__(self, a, tags):
         self.name = a
@@ -69,9 +85,12 @@ class Author:
             self.color = tags['color']
             self.mod = tags['mod']
             self.subscriber = tags['subscriber']
-            self.turbo = tags['turbo']
-            self.id = tags['user-id']
             self.type = tags['user-type']
+            try:
+                self.turbo = tags['turbo']
+				self.id = tags['user-id']
+            except:
+                pass
             
 class Message:
     """ Custom message object to combine message, author and timestamp """
@@ -83,7 +102,7 @@ class Message:
             self.id = tags['id']
             self.room_id = tags['room-id']
         self.content = m
-        self.author = Author(a, tags)
+        self.author = User(a, tags)
     def __str__(self):
         return self.content
     
@@ -254,41 +273,40 @@ class Bot:
     @asyncio.coroutine
     def _get_stats(self):
         """ Gets JSON from the Kraken API """
-        # There should be a better way to do this
         while True:
-            func = functools.partial(requests.get, 'https://api.twitch.tv/kraken/channels/{}?client_id={}'.format(self.chan[1:], self.client_id))
-            j = (yield from self.loop.run_in_executor(None, func)).json()
-            self.channel_stats = {
-                'mature':j['mature'],
-                'title':j['status'],
-                'game':j['game'],
-                'id':j['_id'],
-                'created_at':time.mktime(time.strptime(j['created_at'], '%Y-%m-%dT%H:%M:%SZ')),
-                'updated_at':time.mktime(time.strptime(j['updated_at'], '%Y-%m-%dT%H:%M:%SZ')),
-                'delay':j['delay'],
-                'offline_logo':j['video_banner'],
-                'profile_picture':j['logo'],
-                'profile_banner':j['profile_banner'],
-                'twitch_partner': j['partner'],
-                'views':j['views'],
-                'followers':j['followers']
-            }
-            
-            func = functools.partial(requests.get, 'https://tmi.twitch.tv/hosts?target={}&include_logins=1'.format(j['_id']))
-            j = (yield from self.loop.run_in_executor(None, func)).json()
-            self.host_count = len(j['hosts'])
-            self.hosts = [x['host_login'] for x in j['hosts']]
-            
-            func = functools.partial(requests.get, 'https://tmi.twitch.tv/group/user/{}/chatters'.format(self.chan[1:]))
-            j = (yield from self.loop.run_in_executor(None, func)).json()
-            self.viewer_count = j['chatter_count']
-            self.channel_moderators = j['chatters']['moderators']
-            self.viewers['viewers'] = j['chatters']['viewers']
-            self.viewers['moderators'] = j['chatters']['moderators']
-            self.viewers['staff'] = j['chatters']['staff']
-            self.viewers['admins'] = j['chatters']['admins']
-            self.viewers['global_moderators'] = j['chatters']['global_mods']
-            
+            try:
+                j = yield from get_url(self.loop, 'https://api.twitch.tv/kraken/channels/{}?client_id={}'.format(self.chan[1:], self.client_id))
+                self.channel_stats = {
+                    'mature':j['mature'],
+                    'title':j['status'],
+                    'game':j['game'],
+                    'id':j['_id'],
+                    'created_at':time.mktime(time.strptime(j['created_at'], '%Y-%m-%dT%H:%M:%SZ')),
+                    'updated_at':time.mktime(time.strptime(j['updated_at'], '%Y-%m-%dT%H:%M:%SZ')),
+                    'delay':j['delay'],
+                    'offline_logo':j['video_banner'],
+                    'profile_picture':j['logo'],
+                    'profile_banner':j['profile_banner'],
+                    'twitch_partner': j['partner'],
+                    'views':j['views'],
+                    'followers':j['followers']
+                }
+                
+                j = yield from get_url(self.loop, 'https://tmi.twitch.tv/hosts?target={}&include_logins=1'.format(j['_id']))
+                self.host_count = len(j['hosts'])
+                self.hosts = [x['host_login'] for x in j['hosts']]
+                
+                j = yield from get_url(self.loop, 'https://tmi.twitch.tv/group/user/{}/chatters'.format(self.chan[1:]))
+                self.viewer_count = j['chatter_count']
+                self.channel_moderators = j['chatters']['moderators']
+                self.viewers['viewers'] = j['chatters']['viewers']
+                self.viewers['moderators'] = j['chatters']['moderators']
+                self.viewers['staff'] = j['chatters']['staff']
+                self.viewers['admins'] = j['chatters']['admins']
+                self.viewers['global_moderators'] = j['chatters']['global_mods']
+                
+            except Exception:
+                traceback.print_exc()
             yield from asyncio.sleep(120)
     
     def start(self):
@@ -299,7 +317,7 @@ class Bot:
     
     @asyncio.coroutine
     def _pong(self, src):
-        """ Tell remote we"re still alive """
+        """ Tell remote we're still alive """
         self.writer.write("PONG {}\r\n".format(src).encode('utf-8'))
     
     @ratelimit_wrapper
@@ -563,13 +581,13 @@ class Bot:
                         sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
                             "@(?P=author).tmi.twitch.tv", data).group("author")
                             
-                        yield from self.event_user_join(sender)
+                        yield from self.event_user_join(User(sender, None))
                         
                     elif action == "PART":
                         sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
                             "@(?P=author).tmi.twitch.tv", data).group("author")
                             
-                        yield from self.event_user_leave(sender)
+                        yield from self.event_user_leave(User(sender, None))
                     
                     elif action == "MODE":
                         
@@ -579,20 +597,18 @@ class Bot:
                         user = m.group("user")
                         
                         if mode == "+":
-                            yield from self.event_user_op(user)
+                            yield from self.event_user_op(User(user, None))
                         else:
-                            yield from self.event_user_deop(user)
+                            yield from self.event_user_deop(User(user, None))
                     
                     elif action == "USERSTATE":
-                        if not tags: 
-                            continue
                             
                         if tags["mod"] == 1:
                             self.is_mod = True
                         else:
                             self.is_mod = False
                             
-                        yield from self.event_userstate(tags)
+                        yield from self.event_userstate(User(self.nick, tags))
                     
                     elif action == "ROOMSTATE":
                         yield from self.event_roomstate(tags)
@@ -601,12 +617,15 @@ class Bot:
                         yield from self.event_notice(tags)
                     
                     elif action == "CLEARCHAT":
-                        user = re.match("#[a-zA-Z0-9_]+ :(?P<user>.+)", data2).group("user")
-                        
-                        if "ban-duration" in tags.keys():
-                            yield from self.event_timeout(user, tags)
+                        try:
+                            user = re.match("#[a-zA-Z0-9_]+ :(?P<user>.+)", data2).group("user")
+                        except:
+                            yield from self.event_clear()
                         else:
-                            yield from self.event_ban(user, tags)
+                            if "ban-duration" in tags.keys():
+                                yield from self.event_timeout(User(user, tags))
+                            else:
+                                yield from self.event_ban(User(user, tags))
                             
                     elif action == "HOSTTARGET":
                         m = re.match("#[a-zA-Z0-9_]+ :(?P<channel>.+?) (?P<count>[0-9\-]*)", 
@@ -628,7 +647,7 @@ class Bot:
                             
                         user = tags["login"]
                         
-                        yield from self.event_subscribe(user, message, tags)
+                        yield from self.event_subscribe(Message(message, user, tags))
                         
                     elif action == "CAP": 
                         # We don"t need this for anything, so just ignore it
@@ -644,9 +663,15 @@ class Bot:
     # Events called by TCP connection
     
     @asyncio.coroutine
-    def event_subscribe(self, user, message, tags):
-        """ Called when someone (re-)subscribes. """
+    def event_clear(self):
+        """ Called when chat is cleared normally """
+        pass
     
+    @asyncio.coroutine
+    def event_subscribe(self, message):
+        """ Called when someone (re-)subscribes. """
+        pass
+        
     @asyncio.coroutine
     def event_host_start(self, viewercount):
         """ Called when the streamer starts hosting. """
@@ -660,31 +685,14 @@ class Bot:
     
     
     @asyncio.coroutine
-    def event_ban(self, user, tags):
-        """
-        Called when a user is banned.
-        
-        Example of what `tags` returns:
-        
-        {
-            "ban-reason": "I dont like you"
-        }
-        """
+    def event_ban(self, user):
+        """ Called when a user is banned. """
         pass
     
     
     @asyncio.coroutine
-    def event_timeout(self, user, tags):
-        """
-        Called when a user is timed out.
-        
-        Example of what `tags` returns:
-        
-        {
-            "ban-reason": "take 10 seconds to think about what you just said",
-            "ban-duration": 10
-        }
-        """
+    def event_timeout(self, user):
+        """ Called when a user is timed out. """
         pass
     
     
@@ -704,23 +712,8 @@ class Bot:
     
     
     @asyncio.coroutine
-    def event_userstate(self, tags):
-        """
-        Triggered when the bot sends a message.
-        
-        Example for what `tags` can return:
-        
-        {
-            "badges": "moderator/1",
-            "color": "00FF7F",
-            "display-name": "martmistsbot",
-            "emote-sets": 0,
-            "mod": 1,
-            "subscriber": 0,
-            "turbo": 0,
-            "user-type": "mod"
-        }
-        """
+    def event_userstate(self, User):
+        """ Triggered when the bot sends a message. """
         pass
     
     
@@ -875,7 +868,7 @@ class CommandBot(Bot):
         """ Shitty command parser I made """
         
         if self.nick == rm.author.name: return
-		
+        
         if rm.content.startswith(self.prefix):
     
             m = rm.content[len(self.prefix):]
@@ -911,6 +904,7 @@ class CommandBot(Bot):
         
         self.playlist = l
         while self.playlist:
-            song = self.playlist.pop(0)
-            self.playing = song
-            yield from self.play_ytdl(song)
+            if not self.is_playing:
+                song = self.playlist.pop(0)
+                self.playing = song
+                yield from self.play_ytdl(song)
