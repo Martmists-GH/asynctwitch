@@ -88,7 +88,7 @@ class User:
             self.type = tags['user-type']
             try:
                 self.turbo = tags['turbo']
-				self.id = tags['user-id']
+                self.id = tags['user-id']
             except:
                 pass
             
