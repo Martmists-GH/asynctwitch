@@ -14,7 +14,7 @@ import time
 import aiohttp
     
 @asyncio.coroutine
-def get_url(loop, url):
+def _get_url(loop, url):
     session = aiohttp.ClientSession(loop=loop)
     with aiohttp.Timeout(10):
         response = yield from session.get(url)
@@ -275,7 +275,7 @@ class Bot:
         """ Gets JSON from the Kraken API """
         while True:
             try:
-                j = yield from get_url(self.loop, 'https://api.twitch.tv/kraken/channels/{}?client_id={}'.format(self.chan[1:], self.client_id))
+                j = yield from _get_url(self.loop, 'https://api.twitch.tv/kraken/channels/{}?client_id={}'.format(self.chan[1:], self.client_id))
                 self.channel_stats = {
                     'mature':j['mature'],
                     'title':j['status'],
@@ -292,11 +292,11 @@ class Bot:
                     'followers':j['followers']
                 }
                 
-                j = yield from get_url(self.loop, 'https://tmi.twitch.tv/hosts?target={}&include_logins=1'.format(j['_id']))
+                j = yield from _get_url(self.loop, 'https://tmi.twitch.tv/hosts?target={}&include_logins=1'.format(j['_id']))
                 self.host_count = len(j['hosts'])
                 self.hosts = [x['host_login'] for x in j['hosts']]
                 
-                j = yield from get_url(self.loop, 'https://tmi.twitch.tv/group/user/{}/chatters'.format(self.chan[1:]))
+                j = yield from _get_url(self.loop, 'https://tmi.twitch.tv/group/user/{}/chatters'.format(self.chan[1:]))
                 self.viewer_count = j['chatter_count']
                 self.channel_moderators = j['chatters']['moderators']
                 self.viewers['viewers'] = j['chatters']['viewers']
@@ -890,9 +890,9 @@ class CommandBot(Bot):
                 if not self.commands[w].unprefixed:
                     yield from self.commands[w].run(rm)
     
-    def command(self, *args, **kwargs):
+    def command(*args, **kwargs):
         """ Add a command """
-        return Command(self, *args, **kwargs)
+        return Command(*args, **kwargs)
     
     def add_timer(self, message, time=60):
         t = create_timer(message, time)
