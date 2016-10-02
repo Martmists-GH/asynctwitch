@@ -1,5 +1,4 @@
 from setuptools import setup, find_packages
-from codecs import open
 from os import path
 
 here = path.abspath(path.dirname(__file__))
@@ -36,6 +35,6 @@ setup(
         'aiohttp'
     ],
 	
-    keywords='asynchronous twitch bot library with built-in (optional) commands system',
+    keywords='asyncio twitch irc',
     py_modules=["asynctwitch"]
 )
