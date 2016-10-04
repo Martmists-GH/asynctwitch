@@ -11,8 +11,15 @@ import time
 import subprocess
 import time
     
-import aiohttp
-    
+# Test if they have aiohttp installed in case they didn't use setup.py
+try:
+    import aiohttp
+    aio_installed = True
+except ImportError:
+    print("To use stats from the API, make sure to install aiohttp. (pip install aiohttp)")
+    aio_installed = False
+	
+	
 @asyncio.coroutine
 def _get_url(loop, url):
     session = aiohttp.ClientSession(loop=loop)
@@ -59,7 +66,7 @@ def ratelimit_wrapper(coro):
     
 class Song:
     def __init__(self):
-        pass
+        self.title = None # In case setattrs() isn't called
         
     def setattrs(self, obj):
         self.likes = obj['like_count']
@@ -73,6 +80,7 @@ class Song:
         self.thumbnail = obj['thumbnail']
         self.id = obj['id']
         self.is_live = obj['is_live']
+		
     def __str__(self):
         return self.title
         
@@ -273,6 +281,9 @@ class Bot:
     @asyncio.coroutine
     def _get_stats(self):
         """ Gets JSON from the Kraken API """
+        if not aio_installed:
+            return
+        
         while True:
             try:
                 j = yield from _get_url(self.loop, 'https://api.twitch.tv/kraken/channels/{}?client_id={}'.format(self.chan[1:], self.client_id))
