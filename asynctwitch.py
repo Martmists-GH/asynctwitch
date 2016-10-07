@@ -118,13 +118,13 @@ class Message:
 class Command:
     """ A command class to provide methods we can use with it """
 
-    def __init__(self, bot, comm, *, alias=[], desc="",
+    def __init__(self, bot, comm, *, alias=None, desc="",
                  admin=False, unprefixed=False, listed=True):
 
         self.bot = bot
         self.comm = comm
         self.desc = desc
-        self.alias = alias
+        self.alias = alias or []
         self.admin = admin
         self.listed = listed
         self.unprefixed = unprefixed
@@ -214,7 +214,7 @@ class Bot:
     """ Bot class without command support """
 
     def __init__(self, *, oauth=None, user=None, channel="twitch",
-                 prefix="!", admins=[], config=None, cache=100):
+                 prefix="!", admins=None, config=None, cache=100):
 
         if config:
             self.load(config)
@@ -237,7 +237,7 @@ class Bot:
         self.host = "irc.chat.twitch.tv"
         self.port = 6667
 
-        self.admins = admins
+        self.admins = admins or []
 
         self.song = Song()
         self.is_mod = False
