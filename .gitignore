@@ -8,3 +8,4 @@ settings.ini
 *.egg-info/
 *.mp3
 *.avi
+.tox/
