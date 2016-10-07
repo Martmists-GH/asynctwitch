@@ -3,13 +3,13 @@ from os import path
 
 here = path.abspath(path.dirname(__file__))
 
-with open('README.md') as f:
+with open('README.rst') as f:
     long_description = f.read()
 
 setup(
     name='asynctwitch',
 
-    version='3.1.1',
+    version='3.1.3',
 
     description='Asynchonous wrapper for twitch IRC3',
     long_description=long_description,

@@ -70,10 +70,11 @@ class Color:
 
     def _get_part(self, byte):
         return (self.value >> (8 * byte)) & 0xff
-    def __eq__(self, color):
-        return isinstance(color, Color) and self.value == color.value
-    def __ne__(self, color):
-        return not self.__eq__(color)
+
+    def __eq__(self, clr):
+        return isinstance(clr, Color) and self.value == clr.value
+    def __ne__(self, clr):
+        return not self.__eq__(clr)
     def __str__(self):
         return '#{:0>6x}'.format(self.value)
 
@@ -88,7 +89,7 @@ class Color:
         return self._get_part(0)
 
     def get_tuple(self):
-        """Returns an (r, g, b) tuple of the color."""
+        """ Returns an (r, g, b) tuple of the color """
         return (self.r, self.g, self.b)
 
     @classmethod
@@ -293,7 +294,8 @@ class Bot:
     """ Bot class without command support """
 
     def __init__(self, *, oauth=None, user=None, channel="twitch",
-                 prefix="!", admins=None, config=None, cache=100):
+                 prefix="!", admins=None, config=None, cache=100, 
+                 client_id=None):
 
         if config:
             self.load(config)
@@ -360,7 +362,7 @@ class Bot:
     @asyncio.coroutine
     def _get_stats(self):
         """ Gets JSON from the Kraken API """
-        if not aio_installed:
+        if not aio_installed or not self.client_id:
             return
 
         while True:
@@ -576,7 +578,8 @@ class Bot:
         self.reader, self.writer = yield from asyncio.open_connection(self.host, self.port,
                                                                       loop=self.loop)
 
-        yield from self._pass()
+        if not self.nick.startswith('justinfan'):
+            yield from self._pass()
         yield from self._nick()
 
         modes = ("commands","tags","membership")
@@ -857,7 +860,6 @@ class Bot:
 
     # End of events
 
-    @asyncio.coroutine
     def stop(self, exit=False):
         """
         Stops the bot and disables using it again.
