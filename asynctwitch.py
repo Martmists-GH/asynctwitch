@@ -769,7 +769,6 @@ class Bot:
     
     # End of events
     
-    @asyncio.coroutine
     def stop(self, exit=False):
         """
         Stops the bot and disables using it again.
@@ -780,10 +779,22 @@ class Bot:
         
         if hasattr(self, "player"):
             self.player.terminate()
-        self.loop.stop()
-        while self.loop.is_running():
+	
+        if hasattr(self, "writer"):
+            self.writer.close()
+            
+        pending = asyncio.Task.all_tasks()
+        gathered = asyncio.gather(*pending)
+
+        try:
+            gathered.cancel()
+            self.loop.run_until_complete(gathered)
+            gathered.exception()
+        except: # Can be ignored
             pass
-        self.loop.close()
+        
+        self.loop.stop()
+        
         if exit:
             os._exit(0)
     
