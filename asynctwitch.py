@@ -63,23 +63,102 @@ def ratelimit_wrapper(coro):
         return r
     return wrapper
 
+class Color:
+    """ Available colors for non-turbo users when using Bot.color """
+    def __init__(self, value):
+        self.value = value
+
+    def _get_part(self, byte):
+        return (self.value >> (8 * byte)) & 0xff
+    def __eq__(self, color):
+        return isinstance(color, Color) and self.value == color.value
+    def __ne__(self, color):
+        return not self.__eq__(color)
+    def __str__(self):
+        return '#{:0>6x}'.format(self.value)
+
+    @property
+    def r(self):
+        return self._get_part(2)
+    @property
+    def g(self):
+        return self._get_part(1)
+    @property
+    def b(self):
+        return self._get_part(0)
+
+    def get_tuple(self):
+        """Returns an (r, g, b) tuple of the color."""
+        return (self.r, self.g, self.b)
+
+    @classmethod
+    def blue(cls):
+        return cls(0x0000FF)
+    @classmethod
+    def red(cls):
+        return cls(0xFF0000)
+    @classmethod
+    def chocolate(cls):
+        return cls(0xD2691E)
+    @classmethod
+    def green(cls):
+        return cls(0x008000)
+    @classmethod
+    def hot_pink(cls):
+        return cls(0xFF69B4)
+    @classmethod
+    def dodger_blue(cls):
+        return cls(0x1E90FF)
+    @classmethod
+    def coral(cls):
+        return cls(0xFF7F50)
+    @classmethod
+    def cadet_blue(cls):
+        return cls(0x5F9EA0)
+    @classmethod
+    def firebrick(cls):
+        return cls(0xB22222)
+    @classmethod
+    def blue_violet(cls):
+        return cls(0x8A2BE2)
+    @classmethod
+    def golden_rod(cls):
+        return cls(0xDAA520)
+    @classmethod
+    def orange_red(cls):
+        return cls(0xFF4500)
+    @classmethod
+    def sea_green(cls):
+        return cls(0x2E8B57)
+    @classmethod
+    def spring_green(cls):
+        return cls(0x00FF7F)
+    @classmethod
+    def yellow_green(cls):
+        return cls(0x9ACD32)
+
+Colour = Color
 
 class Song:
+    """ Contains information about a mp3 file """
     def __init__(self):
         self.title = ""  # In case setattrs() isn't called
 
     def setattrs(self, obj):
-        self.likes = obj['like_count']
-        self.dislikes = obj['dislike_count']
         self.title = obj['title']
-        self.duration = obj['duration']
-        self.uploader = obj['uploader']
-        self.description = obj['description']
-        self.categories = obj['categories']
-        self.views = obj['view_count']
-        self.thumbnail = obj['thumbnail']
-        self.id = obj['id']
-        self.is_live = obj['is_live']
+        try: # not available with play_file
+            self.duration = obj['duration']
+            self.uploader = obj['uploader']
+            self.description = obj['description']
+            self.categories = obj['categories']
+            self.views = obj['view_count']
+            self.thumbnail = obj['thumbnail']
+            self.id = obj['id']
+            self.is_live = obj['is_live']
+            self.likes = obj['like_count']
+            self.dislikes = obj['dislike_count']
+        except Exception:
+            pass
 
     def __str__(self):
         return self.title
@@ -130,7 +209,7 @@ class Command:
         self.unprefixed = unprefixed
         self.subcommands = []
         bot.commands[comm] = self
-        for a in alias:
+        for a in self.alias:
             bot.commands[a] = self
 
     def subcommand(self, *args, **kwargs):
@@ -416,8 +495,12 @@ class Bot:
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def color(self, user, msg):
-        self.writer.write("PRIVMSG {} :.w {} {}\r\n".format(self.chan, user, msg).encode('utf-8'))
+    def color(self, color):
+        self.writer.write("PRIVMSG {} :.color {}\r\n".format(self.chan, color).encode('utf-8'))
+
+    @asyncio.coroutine
+    def colour(self, colour):
+        yield from self.color(colour)
 
     @ratelimit_wrapper
     @asyncio.coroutine
@@ -674,6 +757,11 @@ class Bot:
     # Events called by TCP connection
 
     @asyncio.coroutine
+    def event_notice(self, tags):
+        """ Called on NOTICE events (when commands are called) """
+        pass
+
+    @asyncio.coroutine
     def event_clear(self):
         """ Called when chat is cleared normally """
         pass
@@ -778,7 +866,7 @@ class Bot:
         
         if hasattr(self, "player"):
             self.player.terminate()
-	
+    
         if hasattr(self, "writer"):
             self.writer.close()
             
@@ -826,6 +914,10 @@ class Bot:
 
         j = json.loads(j.decode().strip())
         t = math.ceil( float( j["format"]["duration"] ) ) + 2
+        if self.Song == Song():
+            self.Song.setattrs({
+                'title': ' '.join(file.split('.')[:-1])
+            })
         asyncio.ensure_future(self._actually_play(file, t))
 
 
