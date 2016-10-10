@@ -10,6 +10,7 @@ import configparser
 import time
 import subprocess
 import time
+import functools
 
 # Test if they have aiohttp installed in case they didn't use setup.py
 try:
@@ -36,9 +37,7 @@ def _get_url(loop, url):
                 yield from response.release()
             session.close()
 
-@asyncio.coroutine
 def _decrease_msgcount(self):
-    yield from asyncio.sleep(20)
     self.message_count -= 1
 
 def create_timer(message, time):
@@ -59,7 +58,7 @@ def ratelimit_wrapper(coro):
 
         self.message_count += 1
         r = yield from coro(self, *args, **kwargs)
-        asyncio.ensure_future(_decrease_msgcount(self)) # make sure it doesn't block the event loop
+        self.loop.call_later(20, _decrease_msgcount, self) # make sure it doesn't block the event loop
         return r
     return wrapper
 
@@ -597,14 +596,11 @@ class Bot:
             yield from self.raw_event(rdata)
 
             try:
-                if rdata.startswith("@"):
-                    p = re.compile("@(?P<tags>.+?) (?P<data>.+?) (?P<action>[A-Z]+?) (?P<data2>.+)")
 
-                elif rdata.startswith("PING"):
-                    p = re.compile("(?P<action>[A-Z]+?) (?P<data2>.*)")
-
+                if rdata.startswith("PING"):
+                    p = re.compile("PING (?P<content>.*)")
                 else:
-                    p = re.compile("(?P<data>.+?) (?P<action>[A-Z]+?) (?P<data2>.+)")
+                    p = re.compile("^(?:@(?P<tags>\S+)\s)?:(?P<data>\S+)(?:\s)(?P<action>[A-Z]+)(?:\s#)(?P<channel>\S+)(?:\s(?::)?(?P<content>.+))?")
 
                 m = p.match(rdata)
 
@@ -632,64 +628,63 @@ class Bot:
                     data = None
 
                 try:
-                    data2 = m.group("data2")
+                    content = m.group('content')
                 except:
-                    data2 = None
+                    content = None    
+
+                try:
+                    channel = m.group('channel')
+                except:
+                    channel = None
 
             except:
                 pass
 
             else:
-
                 try:
                     if not action:
                         continue
 
                     if action == "PING":
-                        yield from self._pong(data2)
+                        yield from self._pong(content)
 
                     elif action == "PRIVMSG":
-                        sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
+                        sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
                             "@(?P=author).tmi.twitch.tv", data).group("author")
 
-                        message = re.match("#[a-zA-Z0-9_]+ "
-                            ":(?P<content>.+)", data2).group("content")
 
-                        messageobj = Message(message, sender, tags)
+                        messageobj = Message(content, sender, tags)
 
                         yield from self._cache(messageobj)
 
                         yield from self.event_message(messageobj)
 
                     elif action == "WHISPER":
-                        sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
+                        sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
                             "@(?P=author).tmi.twitch.tv", data).group("author")
 
-                        message = re.match("[a-zA-Z0-9_]+ "
-                            ":(?P<content>.+)", data2).group("content")
-
-                        messageobj = Message(message, sender, tags)
+                        messageobj = Message(content, sender, tags)
 
                         yield from self._cache(messageobj)
 
                         yield from self.event_private_message(messageobj)
 
                     elif action == "JOIN":
-                        sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
+                        sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
                             "@(?P=author).tmi.twitch.tv", data).group("author")
 
                         yield from self.event_user_join(User(sender, None))
 
                     elif action == "PART":
-                        sender = re.match(":(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
+                        sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
                             "@(?P=author).tmi.twitch.tv", data).group("author")
 
                         yield from self.event_user_leave(User(sender, None))
 
                     elif action == "MODE":
 
-                        m = re.match("#[a-zA-Z0-9]+ (?P<mode>[\+\-])o (?P<user>.+)",
-                                         data2)
+                        m = re.match("(?P<mode>[\+\-])o (?P<user>.+)",
+                                     content)
                         mode = m.group("mode")
                         user = m.group("user")
 
@@ -714,21 +709,19 @@ class Bot:
                         yield from self.event_notice(tags)
 
                     elif action == "CLEARCHAT":
-                        try:
-                            user = re.match("#[a-zA-Z0-9_]+ :(?P<user>.+)", data2).group("user")
-                        except:
+                        if not content:
                             yield from self.event_clear()
                         else:
                             if "ban-duration" in tags.keys():
-                                yield from self.event_timeout(User(user, tags))
+                                yield from self.event_timeout(User(content), tags)
                             else:
-                                yield from self.event_ban(User(user, tags))
+                                yield from self.event_ban(User(content), tags)
 
                     elif action == "HOSTTARGET":
-                        m = re.match("#[a-zA-Z0-9_]+ :(?P<channel>.+?) (?P<count>[0-9\-]*)",
-                                      data2)
+                        m = re.match("(?P<channel>[a-zA-Z0-9_]+) (?P<count>[0-9\-]+)",
+                                      content)
                         channel = m.group("channel")
-                        viewcount = m.group("count")
+                        viewers = m.group("count")
 
                         if channel == "-":
                             yield from self.event_host_stop(viewers)
@@ -736,12 +729,7 @@ class Bot:
                             yield from self.event_host_start(channel, viewers)
 
                     elif action == "USERNOTICE":
-                        if re.search(":", data2):
-                            message = re.match("#[a-zA-Z0-9_]+ :(?P<message>.+?)",
-                                                data2).group("message")
-                        else:
-                            message = ""
-
+                        message = message or ""
                         user = tags["login"]
 
                         yield from self.event_subscribe(Message(message, user, tags))
@@ -775,13 +763,13 @@ class Bot:
         pass
 
     @asyncio.coroutine
-    def event_host_start(self, viewercount):
+    def event_host_start(self, channel, viewercount):
         """ Called when the streamer starts hosting. """
         pass
 
 
     @asyncio.coroutine
-    def event_host_stop(self, channel, viewercount):
+    def event_host_stop(self, viewercount):
         """ Called when the streamer stops hosting. """
         pass
 
@@ -916,8 +904,8 @@ class Bot:
 
         j = json.loads(j.decode().strip())
         t = math.ceil( float( j["format"]["duration"] ) ) + 2
-        if self.Song == Song():
-            self.Song.setattrs({
+        if self.song == Song():
+            self.song.setattrs({
                 'title': ' '.join(file.split('.')[:-1])
             })
         asyncio.ensure_future(self._actually_play(file, t))
@@ -1016,6 +1004,7 @@ class CommandBot(Bot):
     @asyncio.coroutine
     def play_list(self, l):
         """ play songs from a list using play_ytdl """
+        # Broken
 
         self.playlist = l
         while self.playlist:
