@@ -9,7 +9,7 @@ with open('README.rst') as f:
 setup(
     name='asynctwitch',
 
-    version='3.1.3',
+    version='3.1.4',
 
     description='Asynchonous wrapper for twitch IRC3',
     long_description=long_description,
@@ -32,7 +32,8 @@ setup(
         'Programming Language :: Python :: 3.4+',
     ],
     install_requires=[
-        'aiohttp'
+        'aiohttp',
+        'isodate'
     ],
 	
     keywords='asyncio twitch irc',

@@ -11,6 +11,7 @@ import time
 import subprocess
 import time
 import functools
+import sqlite3
 
 # Test if they have aiohttp installed in case they didn't use setup.py
 try:
@@ -19,7 +20,21 @@ try:
 except ImportError:
     print("To use stats from the API, make sure to install aiohttp. (pip install aiohttp)")
     aio_installed = False
+    
+try:
+    import isodate
+    iso_installed = True
+except ImportError:
+    print("To use music, please install isodate. (pip install isodate)")
+    iso_installed = False
 
+def _setup_sql_db(file):
+    open(file,'a').close()
+    connection = sqlite3.connect(file)
+    cursor = connection.cursor()
+    cursor.execute("CREATE TABLE currency VALUES (username VARCHAR(30), balance INT)")
+    connection.commit()
+    connection.close()
 
 @asyncio.coroutine
 def _get_url(loop, url):
@@ -136,6 +151,9 @@ class Color:
     @classmethod
     def yellow_green(cls):
         return cls(0x9ACD32)
+	@classmethod
+    def custom(cls, hex):	
+        return cls(hex)
 
 Colour = Color
 
@@ -143,11 +161,15 @@ class Song:
     """ Contains information about a mp3 file """
     def __init__(self):
         self.title = ""  # In case setattrs() isn't called
+        self.is_playing = False
 
     def setattrs(self, obj):
         self.title = obj['title']
         try: # not available with play_file
-            self.duration = obj['duration']
+            if isinstance(obj['duration'], str):
+                self.duration = isodate.parse_duration(obj['duration']).total_seconds()
+            else:
+                self.duration = obj['duration']
             self.uploader = obj['uploader']
             self.description = obj['description']
             self.categories = obj['categories']
@@ -162,6 +184,19 @@ class Song:
 
     def __str__(self):
         return self.title
+        
+    @asyncio.coroutine
+    def _play(self, file, cleanup=True):
+        if self.is_playing:
+            raise Exception("Already playing!")
+        self.is_playing = True
+        yield from asyncio.create_subprocess_exec("ffplay", "-nodisp", "-autoexit", "-v", "-8",
+                                                  file, stdout=asyncio.subprocess.DEVNULL,
+                                                        stderr=asyncio.subprocess.DEVNULL)
+        yield from asyncio.sleep(self.duration)
+        self.is_playing = False
+        if cleanup:
+            os.remove(file)
 
 class User:
     """ Custom author class """
@@ -323,7 +358,7 @@ class Bot:
         self.is_mod = False
         self.is_playing = False
 
-        self.message_count = 1 # Just in case some get sent almost simultaneously
+        self.message_count = 1 # Just in case some get sent almost simultaneously even though they shouldn't
 
         self.channel_stats = {}
 
@@ -598,9 +633,10 @@ class Bot:
             try:
 
                 if rdata.startswith("PING"):
-                    p = re.compile("PING (?P<content>.*)")
+                    p = re.compile("PING (?P<content>.+)")
+					
                 else:
-                    p = re.compile("^(?:@(?P<tags>\S+)\s)?:(?P<data>\S+)(?:\s)(?P<action>[A-Z]+)(?:\s#)(?P<channel>\S+)(?:\s(?::)?(?P<content>.+))?")
+                    p = re.compile(r"^(?:@(?P<tags>\S+)\s)?:(?P<data>\S+)(?:\s)(?P<action>[A-Z]+)(?:\s#)(?P<channel>\S+)(?:\s(?::)?(?P<content>.+))?")
 
                 m = p.match(rdata)
 
@@ -620,7 +656,7 @@ class Bot:
                 try:
                     action = m.group("action")
                 except:
-                    action = None
+                    action = "PING"
 
                 try:
                     data = m.group("data")
@@ -876,25 +912,14 @@ class Bot:
             os._exit(0)
 
     @asyncio.coroutine
-    def _actually_play(self, file, t):
-        yield from asyncio.create_subprocess_exec("ffplay", "-nodisp", "-autoexit", "-v", "-8",
-                                                  file, stdout=asyncio.subprocess.DEVNULL,
-                                                        stderr=asyncio.subprocess.DEVNULL)
-        yield from asyncio.sleep(t)
-        self.is_playing = False
-        self.song = Song()
-        os.remove(file)
-
-    @asyncio.coroutine
     def play_file(self, file):
         """
         Plays audio.
         For this to work, ffplay, ffmpeg and ffprobe, downloadable from the ffmpeg website,
         have to be in the same folder as the bot OR added to path.
         """
-        if self.is_playing:
+        if self.song.is_playing:
             raise Exception("Already playing a song!")
-        self.is_playing = True
 
         j = yield from self.loop.run_in_executor(None, subprocess.check_output,
                                                  [
@@ -906,13 +931,13 @@ class Bot:
         t = math.ceil( float( j["format"]["duration"] ) ) + 2
         if self.song == Song():
             self.song.setattrs({
-                'title': ' '.join(file.split('.')[:-1])
+                'title': ' '.join(file.split('.')[:-1]),
+                'duration': t
             })
-        asyncio.ensure_future(self._actually_play(file, t))
-
+        asyncio.ensure_future(self.song._play(file))
 
     @asyncio.coroutine
-    def play_ytdl(self, query, *, filename="song.avi", options={}):
+    def play_ytdl(self, query, *, filename="song.flac", options={}):
         """
         Requires youtube_dl to be installed
         `pip install youtube_dl`
@@ -925,7 +950,7 @@ class Bot:
         args = {
             "format": "bestaudio/best",
             "noplaylist": True,
-            "audioformat": "avi",
+            "audioformat": "flac",
             "default_search": "auto",
             "noprogress": True,
             "outtmpl": filename
@@ -1012,3 +1037,41 @@ class CommandBot(Bot):
                 song = self.playlist.pop(0)
                 self.playing = song
                 yield from self.play_ytdl(song)
+
+class CurrencyBot(CommandBot):
+    """ A CommandBot with support for currency """
+    def __init__(self, *args, database='points.db', currency='gold', **kwargs):
+        super().__init__(*args, **kwargs)
+        self.currency_name = currency
+        if not os.pathlib.is_file(database):
+            _setup_sqlite_db()
+        self.database = sqlite3.connect(database)
+        self.cursor = self.database.cursor()
+
+    def add_user(self, user):
+        self.cursor.execute("INSERT INTO currency VALUES (?,0)", (user,))
+
+    def add_currency(self, user, amount):
+        for entry in self.cursor.execute("SELECT balance FROM currency WHERE username = ?", (user,)):
+            # should be just one since usernames are unique
+            balance = entry[0]
+        self.cursor.execute("UPDATE currency SET balance = ? WHERE username = ?", (balance+amount, user))
+
+    def remove_currency(self, user, amount, force_remove=False):
+        for entry in self.cursor.execute("SELECT balance FROM currency WHERE username = ?", (user,)):
+            # should be just one since usernames are unique
+            balance = entry[0]
+        if amount > balance and force_remove:
+            raise Exception("{} owns {} {0.currency_name}, unable to remove {}."
+                            "Use force_remove=True to force this action.".format(user, balance, self, amount))
+        self.cursor.execute("UPDATE currency SET balance = ? WHERE username = ?", (balance-amount, user))
+
+    def save_database(self):
+        self.database.commit()
+
+    def reset_database(self):
+        self.cursor.execute("DROP TABLE currency")
+        _setup_sqlite_db()
+
+    def undo_database_changes(self):
+        self.database.rollback()
