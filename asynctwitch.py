@@ -151,8 +151,8 @@ class Color:
     @classmethod
     def yellow_green(cls):
         return cls(0x9ACD32)
-	@classmethod
-    def custom(cls, hex):	
+    @classmethod
+    def custom(cls, hex):   
         return cls(hex)
 
 Colour = Color
@@ -634,7 +634,7 @@ class Bot:
 
                 if rdata.startswith("PING"):
                     p = re.compile("PING (?P<content>.+)")
-					
+                    
                 else:
                     p = re.compile(r"^(?:@(?P<tags>\S+)\s)?:(?P<data>\S+)(?:\s)(?P<action>[A-Z]+)(?:\s#)(?P<channel>\S+)(?:\s(?::)?(?P<content>.+))?")
 
