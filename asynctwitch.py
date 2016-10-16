@@ -80,6 +80,10 @@ def ratelimit_wrapper(coro):
 class Color:
     """ Available colors for non-turbo users when using Bot.color """
     def __init__(self, value):
+        if not value:
+            value = 0
+        elif isinstance(value, str):
+            value = int(value.strip("#"), 16)
         self.value = value
 
     def _get_part(self, byte):
@@ -91,7 +95,9 @@ class Color:
         return not self.__eq__(clr)
     def __str__(self):
         return '#{:0>6x}'.format(self.value)
-
+    def __add__(self, clr):
+        return Color.from_rgb((self.r+clr.r)/2, (self.g+clr.g)/2, (self.b+clr.b)/2)
+        
     @property
     def r(self):
         return self._get_part(2)
@@ -152,8 +158,9 @@ class Color:
     def yellow_green(cls):
         return cls(0x9ACD32)
     @classmethod
-    def custom(cls, hex):   
-        return cls(hex)
+    def from_rgb(cls, r, g, b):
+        value = ((int(r) << 16) + (int(g) << 8) + int(b))
+        return cls(value)
 
 Colour = Color
 
@@ -200,11 +207,11 @@ class Song:
 
 class User:
     """ Custom author class """
-    def __init__(self, a, tags):
+    def __init__(self, a, tags=None):
         self.name = a
         if tags:
             self.badges = tags['badges']
-            self.color = tags['color']
+            self.color = Color(tags['color'])
             self.mod = tags['mod']
             self.subscriber = tags['subscriber']
             self.type = tags['user-type']
@@ -709,13 +716,13 @@ class Bot:
                         sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
                             "@(?P=author).tmi.twitch.tv", data).group("author")
 
-                        yield from self.event_user_join(User(sender, None))
+                        yield from self.event_user_join(User(sender))
 
                     elif action == "PART":
                         sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
                             "@(?P=author).tmi.twitch.tv", data).group("author")
 
-                        yield from self.event_user_leave(User(sender, None))
+                        yield from self.event_user_leave(User(sender))
 
                     elif action == "MODE":
 
@@ -725,9 +732,9 @@ class Bot:
                         user = m.group("user")
 
                         if mode == "+":
-                            yield from self.event_user_op(User(user, None))
+                            yield from self.event_user_op(User(user))
                         else:
-                            yield from self.event_user_deop(User(user, None))
+                            yield from self.event_user_deop(User(user))
 
                     elif action == "USERSTATE":
 
@@ -765,10 +772,10 @@ class Bot:
                             yield from self.event_host_start(channel, viewers)
 
                     elif action == "USERNOTICE":
-                        message = message or ""
+                        message = content or ""
                         user = tags["login"]
 
-                        yield from self.event_subscribe(Message(message, user, tags))
+                        yield from self.event_subscribe(Message(message, user, tags), tags)
 
                     elif action == "CAP":
                         # We don"t need this for anything, so just ignore it
@@ -794,7 +801,7 @@ class Bot:
         pass
 
     @asyncio.coroutine
-    def event_subscribe(self, message):
+    def event_subscribe(self, message, tags):
         """ Called when someone (re-)subscribes. """
         pass
 
@@ -811,13 +818,13 @@ class Bot:
 
 
     @asyncio.coroutine
-    def event_ban(self, user):
+    def event_ban(self, user, tags):
         """ Called when a user is banned. """
         pass
 
 
     @asyncio.coroutine
-    def event_timeout(self, user):
+    def event_timeout(self, user, tags):
         """ Called when a user is timed out. """
         pass
 
@@ -1038,7 +1045,7 @@ class CommandBot(Bot):
                 self.playing = song
                 yield from self.play_ytdl(song)
 
-class CurrencyBot(CommandBot):
+class CurrencyBot(Bot):
     """ A CommandBot with support for currency """
     def __init__(self, *args, database='points.db', currency='gold', **kwargs):
         super().__init__(*args, **kwargs)
