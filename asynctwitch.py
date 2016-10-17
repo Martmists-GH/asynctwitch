@@ -12,6 +12,8 @@ import subprocess
 import time
 import functools
 import sqlite3
+import uuid
+import datetime
 
 # Test if they have aiohttp installed in case they didn't use setup.py
 try:
@@ -20,7 +22,7 @@ try:
 except ImportError:
     print("To use stats from the API, make sure to install aiohttp. (pip install aiohttp)")
     aio_installed = False
-    
+
 try:
     import isodate
     iso_installed = True
@@ -77,6 +79,72 @@ def ratelimit_wrapper(coro):
         return r
     return wrapper
 
+def _parse_badges(s):
+    if not s:
+        return
+    if "," in s:
+        # multiple badges
+        badges = s.split(",")
+        return [Badge(*badge.split("/")) for badge in badges]
+    else:
+        return Badge(*s.split("/"))
+
+def _parse_emotes(s):
+    emotelist = [] # 25:8-12 354:14-18
+    if not s:
+        return
+    if "/" in s:
+        # multiple emotes
+        emotes = s.split("/")
+        for emote in emotes:
+            res = emote.split(":")
+            emote_id = res[0]
+            locations = res[1]
+            if "," in locations:
+                for loc in locations.split(","):
+                    emotelist.append(Emote(emote_id, loc))
+            else:
+                emotelist.append(Emote(emote_id, locations))
+    else:
+        res = s.split(":")
+        emote_id = res[0]
+        locations = res[1]
+        if "," in locations:
+            for loc in locations.split(","):
+                emotelist.append(Emote(emote_id, loc))
+        else:
+            emotelist.append(Emote(emote_id, locations))
+    return emotelist
+
+class Emote:
+    def __init__(self, id, loc):
+        self.id = int(id)
+        self.location = loc
+        self.url = "https://static-cdn.jtvnw.net/emoticons/v1/{}/3.0".format(id)
+
+    def __str__(self):
+        if not aio_installed:
+            raise Exception("Please install aiohttp to use this feature")
+        else:
+            for k,v in emotes.items():
+                if v['image_id'] == self.id:
+                    return k
+            return ""
+
+class Badge:
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def __str__(self):
+        return "{0.name}/{0.value}".format(self)
+
+    @classmethod
+    def from_str(cls, s):
+        """ e.g. Moderator/1 """
+        n,v = s.split("/")
+        return cls(n,v)
+
 class Color:
     """ Available colors for non-turbo users when using Bot.color """
     def __init__(self, value):
@@ -96,8 +164,20 @@ class Color:
     def __str__(self):
         return '#{:0>6x}'.format(self.value)
     def __add__(self, clr):
+        return Color.from_rgb(
+            min(self.r + clr.r, 255), 
+            min(self.g + clr.g, 255), 
+            min(self.b + clr.b, 255)
+        )
+    def __sub__(self, clr):
+        return Color.from_rgb(
+            max(self.r - clr.r, 0), 
+            max(self.g - clr.g, 0), 
+            max(self.b - clr.b, 0)
+        )
+    def blend(self, clr):
         return Color.from_rgb((self.r+clr.r)/2, (self.g+clr.g)/2, (self.b+clr.b)/2)
-        
+
     @property
     def r(self):
         return self._get_part(2)
@@ -107,10 +187,49 @@ class Color:
     @property
     def b(self):
         return self._get_part(0)
+    @r.setter
+    def r(self, value):
+        self = Color.from_rgb(value, self.g, self.b)
+    @g.setter
+    def g(self, value):
+        self = Color.from_rgb(self.r, value, self.b)
+    @b.setter
+    def b(self, value):
+        self = Color.from_rgb(self.r, self.g, value)
 
-    def get_tuple(self):
+    def to_rgb(self):
         """ Returns an (r, g, b) tuple of the color """
         return (self.r, self.g, self.b)
+    def to_yiq(self):
+        """ Returns a (y, i, q) tuple of the color """
+        r = self.r / 255
+        g = self.g / 255
+        b = self.b / 255
+        y = (0.299 * r) + (0.587 * g) + (0.114 * b)
+        i = (0.596 * r) - (0.275 * g) - (0.321 * b)
+        q = (0.212 * r) - (0.528 * g) + (0.311 * b)
+        return (round(y, 3), round(i, 3), round(q, 3))
+    def to_hsv(self):
+        """ Returns a (h, s, v) tuple of the color """
+        r = self.r / 255
+        g = self.b / 255
+        b = self.b / 255
+        _min = min(r, g, b)
+        _max = max(r, g, b)
+        v = _max
+        delta = _max - _min
+        if _max == 0:
+            return 0, 0, v
+        s = delta / _max
+        if delta == 0:
+            delta = 1
+        if r == _max:
+            h = 60 * (((g - b) / delta) % 6)
+        elif g == _max:
+            h = 60 * (((b - r) / delta) + 2)
+        else:
+            h = 60 * (((r - g) / delta) + 4)
+        return (round(h, 3), round(s, 3), round(v, 3))
 
     @classmethod
     def blue(cls):
@@ -159,8 +278,40 @@ class Color:
         return cls(0x9ACD32)
     @classmethod
     def from_rgb(cls, r, g, b):
+        """ (0,0,0) to (255,255,255) """
         value = ((int(r) << 16) + (int(g) << 8) + int(b))
         return cls(value)
+    @classmethod
+    def from_yiq(cls, y, i, q):
+        r = y + (0.956 * i) + (0.621 * q)
+        g = y - (0.272 * i) - (0.647 * q)
+        b = y - (1.108 * i) + (1.705 * q)
+        r = 1 if r > 1 else max(0, r)
+        g = 1 if g > 1 else max(0, g)
+        b = 1 if b > 1 else max(0, b)
+        return cls.from_rgb(round(r * 255, 3), round(g * 255, 3), round(b * 255, 3))
+    @classmethod
+    def from_hsv(cls, h, s, v):
+        c = v * s
+        h /= 60
+        x = c * (1 - abs((h % 2) - 1))
+        m = v - c
+        if h < 1:
+            res = (c, x, 0)
+        elif h < 2:
+            res = (x, c, 0)
+        elif h < 3:
+            res = (0, c, x)
+        elif h < 4:
+            res = (0, x, c)
+        elif h < 5:
+            res = (x, 0, c)
+        elif h < 6:
+            res = (c, 0, x)
+        else:
+            raise Exception("Unable to convert from HSV to RGB")
+        r, g, b = res
+        return cls.from_rgb(round((r + m)*255, 3), round((g + m)*255, 3), round((b + m)*255, 3))
 
 Colour = Color
 
@@ -200,7 +351,7 @@ class Song:
         yield from asyncio.create_subprocess_exec("ffplay", "-nodisp", "-autoexit", "-v", "-8",
                                                   file, stdout=asyncio.subprocess.DEVNULL,
                                                         stderr=asyncio.subprocess.DEVNULL)
-        yield from asyncio.sleep(self.duration)
+        yield from asyncio.sleep(self.duration + 2) # add 2 to make sure it's not in use by ffplay anymore
         self.is_playing = False
         if cleanup:
             os.remove(file)
@@ -210,7 +361,7 @@ class User:
     def __init__(self, a, tags=None):
         self.name = a
         if tags:
-            self.badges = tags['badges']
+            self.badges = _parse_badges(tags['badges'])
             self.color = Color(tags['color'])
             self.mod = tags['mod']
             self.subscriber = tags['subscriber']
@@ -226,9 +377,10 @@ class Message:
 
     def __init__(self, m, a, tags):
         if tags:
-            self.timestamp = tags['tmi-sent-ts']
-            self.emotes = tags['emotes']
-            self.id = tags['id']
+            self.raw_timestamp = tags['tmi-sent-ts']
+            self.timestamp = datetime.datetime.fromtimestamp(int(tags['tmi-sent-ts'])/1000)
+            self.emotes = _parse_emotes(tags['emotes'])
+            self.id = uuid.UUID(tags['id'])
             self.room_id = tags['room-id']
         self.content = m
         self.author = User(a, tags)
@@ -378,7 +530,7 @@ class Bot:
 
         self.messages = []
         self.channel_moderators = []
-
+        
     def debug(self):
         for x, y in self.__dict__.items():
             print(x, y)
@@ -403,9 +555,16 @@ class Bot:
     @asyncio.coroutine
     def _get_stats(self):
         """ Gets JSON from the Kraken API """
-        if not aio_installed or not self.client_id:
+        if not aio_installed:
             return
-
+        
+        global emotes
+        emotes = (yield from _get_url(self.loop, "https://twitchemotes.com/api_cache/v2/global.json"))['emotes']
+        
+        if not self.client_id:
+            return
+        
+            
         while True:
             try:
                 j = yield from _get_url(self.loop, 'https://api.twitch.tv/kraken/channels/{}?client_id={}'.format(self.chan[1:], self.client_id))
@@ -455,9 +614,9 @@ class Bot:
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def say(self, msg):
+    def say(self, *args):
         """ Send messages """
-        msg = str(msg)
+        msg = " ".join(str(arg) for arg in args)
 
         if len(msg) > 500:
             raise Exception("The maximum amount of characters in one message is 500,"
@@ -466,7 +625,7 @@ class Bot:
         while msg.startswith("."): # Use Bot.ban, Bot.timeout, etc instead
             msg = msg[1:]
 
-        self.writer.write("PRIVMSG {} :{}\r\n".format(self.chan, msg).encode('utf-8'))
+        yield from self._send_privmsg(msg)
 
 
     @asyncio.coroutine
@@ -504,42 +663,49 @@ class Bot:
         if len(self.messages) > self.cache_length:
             self.messages.pop(0)
 
+    @asyncio.coroutine
+    def _send_privmsg(self, s):
+        """ DO NOT USE THIS YOURSELF OR YOU RISK GETTING BANNED FROM TWITCH """
+        s = s.replace("\n", " ")
+        self.writer.write("PRIVMSG {} :{}\r\n".format(self.chan, s).encode('utf-8'))
+    
     # The following are Twitch commands, such as /me, /ban and /host, so I'm not going to put docstrings on these
 
     # TODO Commands:
     # /cheerbadge /commercial
 
+    
     @ratelimit_wrapper
     @asyncio.coroutine
     def ban(self, user, reason=''):
-        self.writer.write("PRIVMSG {} :.ban {} {}\r\n".format(self.chan, user, reason).encode('utf-8'))
+        yield from self._send_privmsg(".ban {} {}".format(user, reason))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def unban(self, user):
-        self.writer.write("PRIVMSG {} :.unban {}\r\n".format(self.chan, user).encode('utf-8'))
+        yield from self._send_privmsg(".unban {}".format(user))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def timeout(self, user, seconds=600, reason=''):
-        self.writer.write(bytes("PRIVMSG {} :.timeout {} {} {}\r\n".format(self.chan, user,
-                                                                       seconds, reason), "UTF-8"))
+        yield from self._send_privmsg(".timeout {} {} {}".format(user, seconds, 
+                                                                       reason))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def me(self, text):
-        self.writer.write("PRIVMSG {} :.me {}\r\n".format(self.chan, text).encode('utf-8'))
+        yield from self._send_privmsg(".me {}".format(text))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def whisper(self, user, msg):
         msg = str(msg)
-        self.writer.write("PRIVMSG {} :.w {} {}\r\n".format(self.chan, user, msg).encode('utf-8'))
+        yield from self._send_privmsg(".w {} {}".format(user, msg))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def color(self, color):
-        self.writer.write("PRIVMSG {} :.color {}\r\n".format(self.chan, color).encode('utf-8'))
+        yield from self._send_privmsg(".color {}".format(color))
 
     @asyncio.coroutine
     def colour(self, colour):
@@ -548,67 +714,67 @@ class Bot:
     @ratelimit_wrapper
     @asyncio.coroutine
     def mod(self, user):
-        self.writer.write("PRIVMSG {} :.mod {}\r\n".format(self.chan, user).encode('utf-8'))
+        yield from self._send_privmsg(".mod {}".format(user))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def unmod(self, user):
-        self.writer.write("PRIVMSG {} :.unmod {}\r\n".format(self.chan, user).encode('utf-8'))
+        yield from self._send_privmsg(".unmod {}".format(user))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def clear(self):
-        self.writer.write("PRIVMSG {} :.clear\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".clear")
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def subscribers_on(self):
-        self.writer.write("PRIVMSG {} :.subscribers\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".subscribers")
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def subscribers_off(self):
-        self.writer.write("PRIVMSG {} :.subscribersoff\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".subscribersoff")
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def slow_on(self):
-        self.writer.write("PRIVMSG {} :.slow\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".slow")
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def slow_off(self):
-        self.writer.write("PRIVMSG {} :.slowoff\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".slowoff")
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def r9k_on(self):
-        self.writer.write("PRIVMSG {} :.r9k\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".r9k")
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def r9k_off(self):
-        self.writer.write("PRIVMSG {} :.r9koff\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".r9koff")
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def emote_only_on(self):
-        self.writer.write("PRIVMSG {} :.emoteonly\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".emoteonly")
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def emote_only_on(self):
-        self.writer.write("PRIVMSG {} :.emoteonlyoff\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".emoteonlyoff")
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def host(self, user):
-        self.writer.write("PRIVMSG {} :.host {}\r\n".format(self.chan, user).encode('utf-8'))
+        yield from self._send_privmsg(".host {}".format(user))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def unhost(self):
-        self.writer.write("PRIVMSG {} :.unhost\r\n".format(self.chan).encode('utf-8'))
+        yield from self._send_privmsg(".unhost")
 
     # End of Twitch commands
 
