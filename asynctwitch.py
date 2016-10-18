@@ -1212,7 +1212,7 @@ class CommandBot(Bot):
                 yield from self.play_ytdl(song)
 
 class CurrencyBot(Bot):
-    """ A CommandBot with support for currency """
+    """ A Bot with support for currency """
     def __init__(self, *args, database='points.db', currency='gold', **kwargs):
         super().__init__(*args, **kwargs)
         self.currency_name = currency
@@ -1221,23 +1221,27 @@ class CurrencyBot(Bot):
         self.database = sqlite3.connect(database)
         self.cursor = self.database.cursor()
 
+    def check_user(self, user):
+        """ Check if the user is already in the database """
+        return bool(list(self.cursor.execute("SELECT * FROM currency WHERE username = ?", (user,))))
+        
     def add_user(self, user):
         self.cursor.execute("INSERT INTO currency VALUES (?,0)", (user,))
 
     def add_currency(self, user, amount):
-        for entry in self.cursor.execute("SELECT balance FROM currency WHERE username = ?", (user,)):
-            # should be just one since usernames are unique
-            balance = entry[0]
+        balance = self.get_currency(user)
         self.cursor.execute("UPDATE currency SET balance = ? WHERE username = ?", (balance+amount, user))
 
     def remove_currency(self, user, amount, force_remove=False):
-        for entry in self.cursor.execute("SELECT balance FROM currency WHERE username = ?", (user,)):
-            # should be just one since usernames are unique
-            balance = entry[0]
-        if amount > balance and force_remove:
+        balance = self.get_currency(user)
+        if amount > balance and not force_remove:
             raise Exception("{} owns {} {0.currency_name}, unable to remove {}."
                             "Use force_remove=True to force this action.".format(user, balance, self, amount))
         self.cursor.execute("UPDATE currency SET balance = ? WHERE username = ?", (balance-amount, user))
+        
+    def get_currency(self, user):
+        entry = list(self.cursor.execute("SELECT balance FROM currency WHERE username = ?", (user,)))
+        return entry[0]
 
     def save_database(self):
         self.database.commit()
