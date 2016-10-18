@@ -1110,13 +1110,11 @@ class Bot:
         asyncio.ensure_future(self.song._play(file))
 
     @asyncio.coroutine
-    def play_ytdl(self, query, *, filename="song.flac", options={}):
+    def play_ytdl(self, query, *, filename="song.flac", options={}, play=True):
         """
         Requires youtube_dl to be installed
         `pip install youtube_dl`
         """
-        if self.is_playing:
-            raise Exception("Already playing a song!")
 
         import youtube_dl
 
@@ -1130,15 +1128,22 @@ class Bot:
         }
         args.update(options)
         ytdl = youtube_dl.YoutubeDL(args)
-        func = functools.partial(ytdl.extract_info, query)
+        if play:
+            func = functools.partial(ytdl.extract_info, query)
+        else:
+            func = functools.partial(ytdl.extract_info, download=False, query)
         info = yield from self.loop.run_in_executor(None, func)
         try:
             info = info['entries'][0]
         except:
             pass
-        self.song = Song()
-        self.song.setattrs(info)
-        yield from self.play_file(filename)
+        song = Song()
+        song.setattrs(info)
+        if play:
+            self.song = song
+            yield from self.play_file(filename)
+        else:
+            return Song
 
 
     @asyncio.coroutine
