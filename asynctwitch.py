@@ -1143,7 +1143,7 @@ class Bot:
             self.song = song
             yield from self.play_file(filename)
         else:
-            return Song
+            return song
 
 
     @asyncio.coroutine
