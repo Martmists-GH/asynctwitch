@@ -1131,7 +1131,7 @@ class Bot:
         if play:
             func = functools.partial(ytdl.extract_info, query)
         else:
-            func = functools.partial(ytdl.extract_info, download=False, query)
+            func = functools.partial(ytdl.extract_info, query, download=False)
         info = yield from self.loop.run_in_executor(None, func)
         try:
             info = info['entries'][0]
