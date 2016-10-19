@@ -3,17 +3,15 @@ import traceback
 import sys
 import os
 import re
-import inspect
 import math
 import json
 import configparser
 import time
 import subprocess
-import time
 import functools
 import sqlite3
-import uuid
-import datetime
+
+from .dataclasses import Command, Message, User, Song
 
 # Test if they have aiohttp installed in case they didn't use setup.py
 try:
@@ -23,14 +21,7 @@ except ImportError:
     print("To use stats from the API, make sure to install aiohttp. (pip install aiohttp)")
     aio_installed = False
 
-try:
-    import isodate
-    iso_installed = True
-except ImportError:
-    print("To use music, please install isodate. (pip install isodate)")
-    iso_installed = False
-
-def _setup_sql_db(file):
+def _setup_points_db(file):
     open(file,'a').close()
     connection = sqlite3.connect(file)
     cursor = connection.cursor()
@@ -38,6 +29,24 @@ def _setup_sql_db(file):
     connection.commit()
     connection.close()
 
+def _setup_ranks_db(file):
+    open(file,'a').close()
+    connection = sqlite3.connect(file)
+    cursor = connection.cursor()
+    cursor.execute("CREATE TABLE user_ranks VALUES (username VARCHAR(30), rankname TEXT)")
+    cursor.execute("CREATE TABLE currency_ranks VALUES (currency INT, rankname TEXT)")
+    cursor.execute("CREATE TABLE watched_ranks VALUES (time INT, rankname TEXT)")
+    connection.commit()
+    connection.close()
+
+def _setup_time_db(file):
+    open(file,'a').close()
+    connection = sqlite3.connect(file)
+    cursor = connection.cursor()
+    cursor.execute("CREATE TABLE time_watched VALUES (username VARCHAR(30), time INT)")
+    connection.commit()
+    connection.close()
+    
 @asyncio.coroutine
 def _get_url(loop, url):
     session = aiohttp.ClientSession(loop=loop)
@@ -78,410 +87,6 @@ def ratelimit_wrapper(coro):
         self.loop.call_later(20, _decrease_msgcount, self) # make sure it doesn't block the event loop
         return r
     return wrapper
-
-def _parse_badges(s):
-    if not s:
-        return
-    if "," in s:
-        # multiple badges
-        badges = s.split(",")
-        return [Badge(*badge.split("/")) for badge in badges]
-    else:
-        return Badge(*s.split("/"))
-
-def _parse_emotes(s):
-    emotelist = [] # 25:8-12 354:14-18
-    if not s:
-        return
-    if "/" in s:
-        # multiple emotes
-        emotes = s.split("/")
-        for emote in emotes:
-            res = emote.split(":")
-            emote_id = res[0]
-            locations = res[1]
-            if "," in locations:
-                for loc in locations.split(","):
-                    emotelist.append(Emote(emote_id, loc))
-            else:
-                emotelist.append(Emote(emote_id, locations))
-    else:
-        res = s.split(":")
-        emote_id = res[0]
-        locations = res[1]
-        if "," in locations:
-            for loc in locations.split(","):
-                emotelist.append(Emote(emote_id, loc))
-        else:
-            emotelist.append(Emote(emote_id, locations))
-    return emotelist
-
-class Emote:
-    def __init__(self, id, loc):
-        self.id = int(id)
-        self.location = loc
-        self.url = "https://static-cdn.jtvnw.net/emoticons/v1/{}/3.0".format(id)
-
-    def __str__(self):
-        if not aio_installed:
-            raise Exception("Please install aiohttp to use this feature")
-        else:
-            for k,v in emotes.items():
-                if v['image_id'] == self.id:
-                    return k
-            return ""
-
-class Badge:
-    def __init__(self, name, value):
-        self.name = name
-        self.value = value
-
-    def __str__(self):
-        return "{0.name}/{0.value}".format(self)
-
-    @classmethod
-    def from_str(cls, s):
-        """ e.g. Moderator/1 """
-        n,v = s.split("/")
-        return cls(n,v)
-
-class Color:
-    """ Available colors for non-turbo users when using Bot.color """
-    def __init__(self, value):
-        if not value:
-            value = 0
-        elif isinstance(value, str):
-            value = int(value.strip("#"), 16)
-        self.value = value
-
-    def _get_part(self, byte):
-        return (self.value >> (8 * byte)) & 0xff
-
-    def __eq__(self, clr):
-        return isinstance(clr, Color) and self.value == clr.value
-    def __ne__(self, clr):
-        return not self.__eq__(clr)
-    def __str__(self):
-        return '#{:0>6x}'.format(self.value)
-    def __add__(self, clr):
-        return Color.from_rgb(
-            min(self.r + clr.r, 255), 
-            min(self.g + clr.g, 255), 
-            min(self.b + clr.b, 255)
-        )
-    def __sub__(self, clr):
-        return Color.from_rgb(
-            max(self.r - clr.r, 0), 
-            max(self.g - clr.g, 0), 
-            max(self.b - clr.b, 0)
-        )
-    def blend(self, clr):
-        return Color.from_rgb((self.r+clr.r)/2, (self.g+clr.g)/2, (self.b+clr.b)/2)
-
-    @property
-    def r(self):
-        return self._get_part(2)
-    @property
-    def g(self):
-        return self._get_part(1)
-    @property
-    def b(self):
-        return self._get_part(0)
-    @r.setter
-    def r(self, value):
-        self = Color.from_rgb(value, self.g, self.b)
-    @g.setter
-    def g(self, value):
-        self = Color.from_rgb(self.r, value, self.b)
-    @b.setter
-    def b(self, value):
-        self = Color.from_rgb(self.r, self.g, value)
-
-    def to_rgb(self):
-        """ Returns an (r, g, b) tuple of the color """
-        return (self.r, self.g, self.b)
-    def to_yiq(self):
-        """ Returns a (y, i, q) tuple of the color """
-        r = self.r / 255
-        g = self.g / 255
-        b = self.b / 255
-        y = (0.299 * r) + (0.587 * g) + (0.114 * b)
-        i = (0.596 * r) - (0.275 * g) - (0.321 * b)
-        q = (0.212 * r) - (0.528 * g) + (0.311 * b)
-        return (round(y, 3), round(i, 3), round(q, 3))
-    def to_hsv(self):
-        """ Returns a (h, s, v) tuple of the color """
-        r = self.r / 255
-        g = self.b / 255
-        b = self.b / 255
-        _min = min(r, g, b)
-        _max = max(r, g, b)
-        v = _max
-        delta = _max - _min
-        if _max == 0:
-            return 0, 0, v
-        s = delta / _max
-        if delta == 0:
-            delta = 1
-        if r == _max:
-            h = 60 * (((g - b) / delta) % 6)
-        elif g == _max:
-            h = 60 * (((b - r) / delta) + 2)
-        else:
-            h = 60 * (((r - g) / delta) + 4)
-        return (round(h, 3), round(s, 3), round(v, 3))
-
-    @classmethod
-    def blue(cls):
-        return cls(0x0000FF)
-    @classmethod
-    def red(cls):
-        return cls(0xFF0000)
-    @classmethod
-    def chocolate(cls):
-        return cls(0xD2691E)
-    @classmethod
-    def green(cls):
-        return cls(0x008000)
-    @classmethod
-    def hot_pink(cls):
-        return cls(0xFF69B4)
-    @classmethod
-    def dodger_blue(cls):
-        return cls(0x1E90FF)
-    @classmethod
-    def coral(cls):
-        return cls(0xFF7F50)
-    @classmethod
-    def cadet_blue(cls):
-        return cls(0x5F9EA0)
-    @classmethod
-    def firebrick(cls):
-        return cls(0xB22222)
-    @classmethod
-    def blue_violet(cls):
-        return cls(0x8A2BE2)
-    @classmethod
-    def golden_rod(cls):
-        return cls(0xDAA520)
-    @classmethod
-    def orange_red(cls):
-        return cls(0xFF4500)
-    @classmethod
-    def sea_green(cls):
-        return cls(0x2E8B57)
-    @classmethod
-    def spring_green(cls):
-        return cls(0x00FF7F)
-    @classmethod
-    def yellow_green(cls):
-        return cls(0x9ACD32)
-    @classmethod
-    def from_rgb(cls, r, g, b):
-        """ (0,0,0) to (255,255,255) """
-        value = ((int(r) << 16) + (int(g) << 8) + int(b))
-        return cls(value)
-    @classmethod
-    def from_yiq(cls, y, i, q):
-        r = y + (0.956 * i) + (0.621 * q)
-        g = y - (0.272 * i) - (0.647 * q)
-        b = y - (1.108 * i) + (1.705 * q)
-        r = 1 if r > 1 else max(0, r)
-        g = 1 if g > 1 else max(0, g)
-        b = 1 if b > 1 else max(0, b)
-        return cls.from_rgb(round(r * 255, 3), round(g * 255, 3), round(b * 255, 3))
-    @classmethod
-    def from_hsv(cls, h, s, v):
-        c = v * s
-        h /= 60
-        x = c * (1 - abs((h % 2) - 1))
-        m = v - c
-        if h < 1:
-            res = (c, x, 0)
-        elif h < 2:
-            res = (x, c, 0)
-        elif h < 3:
-            res = (0, c, x)
-        elif h < 4:
-            res = (0, x, c)
-        elif h < 5:
-            res = (x, 0, c)
-        elif h < 6:
-            res = (c, 0, x)
-        else:
-            raise Exception("Unable to convert from HSV to RGB")
-        r, g, b = res
-        return cls.from_rgb(round((r + m)*255, 3), round((g + m)*255, 3), round((b + m)*255, 3))
-
-Colour = Color
-
-class Song:
-    """ Contains information about a mp3 file """
-    def __init__(self):
-        self.title = ""  # In case setattrs() isn't called
-        self.is_playing = False
-
-    def setattrs(self, obj):
-        self.title = obj['title']
-        try: # not available with play_file
-            if isinstance(obj['duration'], str):
-                self.duration = isodate.parse_duration(obj['duration']).total_seconds()
-            else:
-                self.duration = obj['duration']
-            self.uploader = obj['uploader']
-            self.description = obj['description']
-            self.categories = obj['categories']
-            self.views = obj['view_count']
-            self.thumbnail = obj['thumbnail']
-            self.id = obj['id']
-            self.is_live = obj['is_live']
-            self.likes = obj['like_count']
-            self.dislikes = obj['dislike_count']
-        except Exception:
-            pass
-
-    def __str__(self):
-        return self.title
-        
-    @asyncio.coroutine
-    def _play(self, file, cleanup=True):
-        if self.is_playing:
-            raise Exception("Already playing!")
-        self.is_playing = True
-        yield from asyncio.create_subprocess_exec("ffplay", "-nodisp", "-autoexit", "-v", "-8",
-                                                  file, stdout=asyncio.subprocess.DEVNULL,
-                                                        stderr=asyncio.subprocess.DEVNULL)
-        yield from asyncio.sleep(self.duration + 2) # add 2 to make sure it's not in use by ffplay anymore
-        self.is_playing = False
-        if cleanup:
-            os.remove(file)
-
-class User:
-    """ Custom author class """
-    def __init__(self, a, tags=None):
-        self.name = a
-        if tags:
-            self.badges = _parse_badges(tags['badges'])
-            self.color = Color(tags['color'])
-            self.mod = tags['mod']
-            self.subscriber = tags['subscriber']
-            self.type = tags['user-type']
-            try:
-                self.turbo = tags['turbo']
-                self.id = tags['user-id']
-            except:
-                pass
-
-class Message:
-    """ Custom message object to combine message, author and timestamp """
-
-    def __init__(self, m, a, tags):
-        if tags:
-            self.raw_timestamp = tags['tmi-sent-ts']
-            self.timestamp = datetime.datetime.fromtimestamp(int(tags['tmi-sent-ts'])/1000)
-            self.emotes = _parse_emotes(tags['emotes'])
-            self.id = uuid.UUID(tags['id'])
-            self.room_id = tags['room-id']
-        self.content = m
-        self.author = User(a, tags)
-    def __str__(self):
-        return self.content
-
-
-class Command:
-    """ A command class to provide methods we can use with it """
-
-    def __init__(self, bot, comm, *, alias=None, desc="",
-                 admin=False, unprefixed=False, listed=True):
-
-        self.bot = bot
-        self.comm = comm
-        self.desc = desc
-        self.alias = alias or []
-        self.admin = admin
-        self.listed = listed
-        self.unprefixed = unprefixed
-        self.subcommands = []
-        bot.commands[comm] = self
-        for a in self.alias:
-            bot.commands[a] = self
-
-    def subcommand(self, *args, **kwargs):
-        """ Create subcommands """
-        return SubCommand(self, *args, **kwargs)
-
-
-    def __call__(self, func):
-        """ Make it able to be a decorator """
-
-        self.func = func
-
-        return self
-
-
-    @asyncio.coroutine
-    def run(self, message):
-        """ Does type checking for command arguments """
-
-        args = message.content.split(" ")[1:]
-
-        args_name = inspect.getfullargspec(self.func)[0][1:]
-
-        if len(args) > len(args_name):
-            args[len(args_name)-1] = " ".join(args[len(args_name)-1:])
-
-            args = args[:len(args_name)]
-
-        elif len(args) < len(args_name):
-            raise Exception("Not enough arguments for {}, required arguments: {}"
-                .format(self.comm, ", ".join(args_name)))
-
-        ann = self.func.__annotations__
-
-        for x in range(0, len(args_name)):
-            v = args[x]
-            k = args_name[x]
-
-            if type(v) == ann[k]:
-                pass
-
-            else:
-                try:
-                    v = ann[k](v)
-
-                except:
-                    raise TypeError("Invalid type: got {}, {} expected"
-                        .format(ann[k].__name__, v.__name__))
-
-            args[x] = v
-
-        if len(self.subcommands)>0:
-            subcomm = args.pop(0)
-
-            for s in self.subcommands:
-                if subcomm == s.comm:
-                    c = message.content.split(" ")
-                    message.content = c[0] + " " + " ".join(c[2:])
-
-                    yield from s.run(message)
-                    break
-
-        else:
-            yield from self.func(message, *args)
-
-
-
-class SubCommand(Command):
-    """ Subcommand class """
-
-    def __init__(self, parent, comm, *, desc=""):
-        self.comm = comm
-        self.parent = parent
-        self.bot = parent.bot
-        self.subcommands = []
-        self.parent.subcommands.append(self)
-
-
 
 class Bot:
     """ Bot class without command support """
@@ -559,7 +164,8 @@ class Bot:
             return
         
         global emotes
-        emotes = (yield from _get_url(self.loop, "https://twitchemotes.com/api_cache/v2/global.json"))['emotes']
+        emotes = (yield from _get_url(self.loop, 
+                                      "https://twitchemotes.com/api_cache/v2/global.json"))['emotes']
         
         if not self.client_id:
             return
@@ -567,7 +173,10 @@ class Bot:
             
         while True:
             try:
-                j = yield from _get_url(self.loop, 'https://api.twitch.tv/kraken/channels/{}?client_id={}'.format(self.chan[1:], self.client_id))
+                j = yield from _get_url(self.loop, 
+                                        'https://api.twitch.tv/kraken/channels/{}?client_id={}'.format(
+                                            self.chan[1:], self.client_id
+                                        ))
                 self.channel_stats = {
                     'mature':j['mature'],
                     'title':j['status'],
@@ -584,11 +193,13 @@ class Bot:
                     'followers':j['followers']
                 }
 
-                j = yield from _get_url(self.loop, 'https://tmi.twitch.tv/hosts?target={}&include_logins=1'.format(j['_id']))
+                j = yield from _get_url(self.loop, 
+                                        'https://tmi.twitch.tv/hosts?target={}&include_logins=1'.format(j['_id']))
                 self.host_count = len(j['hosts'])
                 self.hosts = [x['host_login'] for x in j['hosts']]
 
-                j = yield from _get_url(self.loop, 'https://tmi.twitch.tv/group/user/{}/chatters'.format(self.chan[1:]))
+                j = yield from _get_url(self.loop, 
+                                        'https://tmi.twitch.tv/group/user/{}/chatters'.format(self.chan[1:]))
                 self.viewer_count = j['chatter_count']
                 self.channel_moderators = j['chatters']['moderators']
                 self.viewers['viewers'] = j['chatters']['viewers']
@@ -599,7 +210,7 @@ class Bot:
 
             except Exception:
                 traceback.print_exc()
-            yield from asyncio.sleep(120)
+            yield from asyncio.sleep(60)
 
     def start(self):
         """ Starts the event loop, this blocks all other code below it from executing """
@@ -1218,42 +829,170 @@ class CommandBot(Bot):
 
 class CurrencyBot(Bot):
     """ A Bot with support for currency """
-    def __init__(self, *args, database='points.db', currency='gold', **kwargs):
+    def __init__(self, *args, points_database='points.db', currency='gold', **kwargs):
         super().__init__(*args, **kwargs)
         self.currency_name = currency
-        if not os.pathlib.is_file(database):
-            _setup_sqlite_db()
-        self.database = sqlite3.connect(database)
-        self.cursor = self.database.cursor()
+        self.currency_database_name = points_database
+        if not os.pathlib.is_file(points_database):
+            _setup_points_db(points_database)
+        self.currency_database = sqlite3.connect(points_database)
+        self.currency_cursor = self.currency_database.cursor()
 
-    def check_user(self, user):
+    def check_user_currency(self, user):
         """ Check if the user is already in the database """
-        return bool(list(self.cursor.execute("SELECT * FROM currency WHERE username = ?", (user,))))
+        return bool(list(self.currency_cursor.execute("SELECT * FROM currency WHERE username = ?", (user,))))
         
-    def add_user(self, user):
-        self.cursor.execute("INSERT INTO currency VALUES (?,0)", (user,))
+    def add_user_currency(self, user):
+        self.currency_cursor.execute("INSERT INTO currency VALUES (?,0)", (user,))
 
     def add_currency(self, user, amount):
         balance = self.get_currency(user)
-        self.cursor.execute("UPDATE currency SET balance = ? WHERE username = ?", (balance+amount, user))
+        self.currency_cursor.execute("UPDATE currency SET balance = ? WHERE username = ?", (balance+amount, user))
 
     def remove_currency(self, user, amount, force_remove=False):
         balance = self.get_currency(user)
         if amount > balance and not force_remove:
             raise Exception("{} owns {} {0.currency_name}, unable to remove {}."
                             "Use force_remove=True to force this action.".format(user, balance, self, amount))
-        self.cursor.execute("UPDATE currency SET balance = ? WHERE username = ?", (balance-amount, user))
+        self.currency_cursor.execute("UPDATE currency SET balance = ? WHERE username = ?", (balance-amount, user))
         
     def get_currency(self, user):
-        entry = list(self.cursor.execute("SELECT balance FROM currency WHERE username = ?", (user,)))
+        entry = list(self.currency_cursor.execute("SELECT balance FROM currency WHERE username = ?", (user,)))
         return entry[0]
 
-    def save_database(self):
-        self.database.commit()
+    def save_currency_database(self):
+        self.currency_database.commit()
 
-    def reset_database(self):
-        self.cursor.execute("DROP TABLE currency")
-        _setup_sqlite_db()
+    def reset_currency_database(self):
+        self.currency_cursor.execute("DROP TABLE currency")
+        _setup_points_db(self.currency_database_name)
 
-    def undo_database_changes(self):
-        self.database.rollback()
+    def undo_currency_database_changes(self):
+        self.currency_database.rollback()
+
+class ViewTimeBot(Bot):
+    """ A Bot to track view time """
+    def __init__(self, *args, time_database='time.db', **kwargs):
+        if not aio_installed:
+            raise Exception("ViewTimeBot requires aiohttp to be installed!")
+        self.time_database_name = time_database
+        if not os.pathlib.is_file(time_database):
+            _setup_time_db(time_database)
+        self.time_database = sqlite3.connect(time_database)
+        self.time_cursor = self.time_database.cursor()
+        self.loop.create_task(self.collect_task())
+        
+    @asyncio.coroutine
+    def collect_task(self):
+        yield from asyncio.sleep(10)
+        while True:
+            yield from asyncio.sleep(60)
+            users = []
+            for group in self.viewers:
+                for viewer in group:
+                    if not self.check_user_time(viewer):
+                        self.add_user_time(viewer)
+                    self.add_time(viewer, 60)
+                    users.append(viewer)
+            self.save_time_database()
+            yield from self.event_viewtime_update(users)
+                    
+    @asyncio.coroutine
+    def event_viewtime_update(self, users):
+        pass
+
+    def check_user_time(self, user):
+        """ Check if the user is already in the database """
+        return bool(list(self.time_cursor.execute("SELECT * FROM time_watched WHERE username = ?", (user,))))
+        
+    def add_user_time(self, user):
+        self.time_cursor.execute("INSERT INTO time VALUES (?,0)", (user,))
+
+    def add_time(self, user, amount):
+        time = self.get_time(user)
+        self.time_cursor.execute("UPDATE time SET time_watched = ? WHERE username = ?", (time+amount, user))
+
+    def remove_time(self, user, amount, force_remove=False):
+        time = self.get_time(user)
+        if amount > time:
+            amount = time
+        self.time_cursor.execute("UPDATE time_watched SET time = ? WHERE username = ?", (time-amount, user))
+        
+    def get_time(self, user):
+        entry = list(self.time_cursor.execute("SELECT time_watched FROM time WHERE username = ?", (user,)))
+        return entry[0]
+
+    def save_time_database(self):
+        self.time_database.commit()
+
+    def reset_time_database(self):
+        self.time_cursor.execute("DROP TABLE time_watched")
+        _setup_time_db(self.time_database_name)
+
+    def undo_time_database_changes(self):
+        self.time_database.rollback()   
+        
+class RankedBot(ViewTimeBot, CurrencyBot):
+    """ A Bot with ranks """
+    def __init__(self, *args, ranks_database='ranks.db', points_per_minute=1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.autopoints = points_per_minute
+        self.ranks_database_name = ranks_database
+        if not os.pathlib.is_file(ranks_database):
+            _setup_ranks_db(ranks_database)
+        self.rank_database = sqlite3.connect(ranks_database)
+        self.rank_cursor = self.rank_database.cursor()
+        
+    def check_user_rank(self, user, rank):
+        """ Check if the user is already in the database """
+        return bool(list(self.time_cursor.execute("SELECT * FROM user_ranks WHERE username = ? AND rank = ?", (user,rank))))
+        
+    def autoset_user(self, user):
+            if not self.check_user_currency(user):
+                self.add_user_currency(user)
+            bal = self.get_currency(user)
+            if not self.check_user_time(user):
+                self.add_user_time(user)
+            time = self.get_time(user)
+            new_rank = None
+            for rank in list(self.time_cursor.execute("SELECT * FROM currency_ranks ORDER BY currency")):
+                cur = rank[0]
+                if cur <= bal:
+                    new_rank = rank[1]
+            for rank in list(self.time_cursor.execute("SELECT * FROM watched_ranks ORDER BY time")):
+                tim = rank[0]
+                if tim <= time:
+                    new_rank = rank[1]
+            if new_rank:
+                if not check_user_rank(user, new_rank):
+                    self.rank_cursor.execute("DELETE FROM user_ranks WHERE user = ?", (user,))
+                    self.rank_cursor.execute("INSERT INTO user_ranks VALUES (?,?)", (user, new_rank))
+
+
+    @asyncio.coroutine
+    def event_viewtime_update(self, users):
+        for user in users:
+            if not self.check_user_currency():
+                self.add_user_currency(user)
+            self.add_currency(user, self.autopoints)
+        self.save_points_database()
+        
+    def add_rank(self, name, points=0, time_watched=0, type_rank='points'):
+        if type_rank == 'points':
+            self.rank_cursor.execute("INSERT INTO currency_ranks VALUES (?,?)", (points, name))
+        elif type_rank == 'time_watched':
+            self.rank_cursor.execute("INSERT INTO watched_ranks VALUES (?,?)", (time_watched, name))
+        else:
+            raise Exception("Invalid rank type! valid types: 'points', 'time_watched'.")
+
+    def save_rank_database(self):
+        self.rank_database.commit()
+
+    def reset_rank_database(self):
+        self.rank_cursor.execute("DROP TABLE currency_ranks")
+        self.rank_cursor.execute("DROP TABLE watched_ranks")
+        self.rank_cursor.execute("DROP TABLE user_ranks")
+        _setup_ranks_db(self.ranks_database_name)
+
+    def undo_rank_database_changes(self):
+        self.rank_database.rollback()
