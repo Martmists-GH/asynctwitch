@@ -26,7 +26,7 @@ def _setup_points_db(file):
     open(file,'a').close()
     connection = sqlite3.connect(file)
     cursor = connection.cursor()
-    cursor.execute("CREATE TABLE currency VALUES (username VARCHAR(30), balance INT)")
+    cursor.execute("CREATE TABLE currency (username VARCHAR(30), balance INT)")
     connection.commit()
     connection.close()
 
@@ -34,9 +34,9 @@ def _setup_ranks_db(file):
     open(file,'a').close()
     connection = sqlite3.connect(file)
     cursor = connection.cursor()
-    cursor.execute("CREATE TABLE user_ranks VALUES (username VARCHAR(30), rankname TEXT)")
-    cursor.execute("CREATE TABLE currency_ranks VALUES (currency INT, rankname TEXT)")
-    cursor.execute("CREATE TABLE watched_ranks VALUES (time INT, rankname TEXT)")
+    cursor.execute("CREATE TABLE user_ranks (username VARCHAR(30), rankname TEXT)")
+    cursor.execute("CREATE TABLE currency_ranks (currency INT, rankname TEXT)")
+    cursor.execute("CREATE TABLE watched_ranks (time INT, rankname TEXT)")
     connection.commit()
     connection.close()
 
@@ -44,7 +44,7 @@ def _setup_time_db(file):
     open(file,'a').close()
     connection = sqlite3.connect(file)
     cursor = connection.cursor()
-    cursor.execute("CREATE TABLE time_watched VALUES (username VARCHAR(30), time INT)")
+    cursor.execute("CREATE TABLE time_watched (username VARCHAR(30), time INT)")
     connection.commit()
     connection.close()
     
@@ -874,6 +874,7 @@ class CurrencyBot(Bot):
 class ViewTimeBot(Bot):
     """ A Bot to track view time """
     def __init__(self, *args, time_database='time.db', **kwargs):
+        super().__init__(*args, **kwargs)
         if not aio_installed:
             raise Exception("ViewTimeBot requires aiohttp to be installed!")
         self.time_database_name = time_database

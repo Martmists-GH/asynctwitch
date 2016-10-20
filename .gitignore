@@ -9,3 +9,5 @@ settings.ini
 *.mp3
 *.avi
 .tox/
+*.db
+*.db-journal
