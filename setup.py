@@ -19,7 +19,7 @@ setup(
     author='martmists',
     author_email='martmists@gmail.com',
 
-    license='MIT',
+    license='BSD-3-Clause',
 
     classifiers=[
         'Development Status :: 5 - Stable',
@@ -27,7 +27,7 @@ setup(
         'Intended Audience :: Developers',
         'Topic :: Software Development :: Twitch Bot',
 
-        'License :: OSI Approved :: MIT License',
+        'License :: OSI Approved :: BSD-3-Clause License',
 
         'Programming Language :: Python :: 3.4+',
     ],
@@ -37,5 +37,4 @@ setup(
     ],
 	
     keywords='asyncio twitch irc',
-    py_modules=["asynctwitch"]
 )
