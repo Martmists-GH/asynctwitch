@@ -10,6 +10,7 @@ import time
 import subprocess
 import functools
 import sqlite3
+import pathlib
 
 from .dataclasses import Command, Message, User, Song
 
@@ -833,7 +834,7 @@ class CurrencyBot(Bot):
         super().__init__(*args, **kwargs)
         self.currency_name = currency
         self.currency_database_name = points_database
-        if not os.pathlib.is_file(points_database):
+        if not pathlib.Path(points_database).is_file():
             _setup_points_db(points_database)
         self.currency_database = sqlite3.connect(points_database)
         self.currency_cursor = self.currency_database.cursor()
@@ -876,7 +877,7 @@ class ViewTimeBot(Bot):
         if not aio_installed:
             raise Exception("ViewTimeBot requires aiohttp to be installed!")
         self.time_database_name = time_database
-        if not os.pathlib.is_file(time_database):
+        if not pathlib.Path(time_database).is_file():
             _setup_time_db(time_database)
         self.time_database = sqlite3.connect(time_database)
         self.time_cursor = self.time_database.cursor()
@@ -938,7 +939,7 @@ class RankedBot(ViewTimeBot, CurrencyBot):
         super().__init__(*args, **kwargs)
         self.autopoints = points_per_minute
         self.ranks_database_name = ranks_database
-        if not os.pathlib.is_file(ranks_database):
+        if not pathlib.Path(ranks_database).is_file():
             _setup_ranks_db(ranks_database)
         self.rank_database = sqlite3.connect(ranks_database)
         self.rank_cursor = self.rank_database.cursor()
