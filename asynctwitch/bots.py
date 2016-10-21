@@ -847,11 +847,11 @@ class CurrencyBot(Bot):
         self.currency_cursor.execute("INSERT INTO currency VALUES (?,0)", (user,))
 
     def add_currency(self, user, amount):
-        balance = self.get_currency(user)
+        balance = self.get_currency(user)[0]
         self.currency_cursor.execute("UPDATE currency SET balance = ? WHERE username = ?", (balance+amount, user))
 
     def remove_currency(self, user, amount, force_remove=False):
-        balance = self.get_currency(user)
+        balance = self.get_currency(user)[0]
         if amount > balance and not force_remove:
             raise Exception("{} owns {} {0.currency_name}, unable to remove {}."
                             "Use force_remove=True to force this action.".format(user, balance, self, amount))
@@ -890,7 +890,7 @@ class ViewTimeBot(Bot):
         while True:
             yield from asyncio.sleep(60)
             users = []
-            for group in self.viewers:
+            for group in self.viewers.values():
                 for viewer in group:
                     if not self.check_user_time(viewer):
                         self.add_user_time(viewer)
@@ -908,11 +908,11 @@ class ViewTimeBot(Bot):
         return bool(list(self.time_cursor.execute("SELECT * FROM time_watched WHERE username = ?", (user,))))
         
     def add_user_time(self, user):
-        self.time_cursor.execute("INSERT INTO time VALUES (?,0)", (user,))
+        self.time_cursor.execute("INSERT INTO time_watched VALUES (?,0)", (user,))
 
     def add_time(self, user, amount):
-        time = self.get_time(user)
-        self.time_cursor.execute("UPDATE time SET time_watched = ? WHERE username = ?", (time+amount, user))
+        time = self.get_time(user)[0]
+        self.time_cursor.execute("UPDATE time_watched SET time = ? WHERE username = ?", (time+amount, user))
 
     def remove_time(self, user, amount, force_remove=False):
         time = self.get_time(user)
@@ -921,7 +921,7 @@ class ViewTimeBot(Bot):
         self.time_cursor.execute("UPDATE time_watched SET time = ? WHERE username = ?", (time-amount, user))
         
     def get_time(self, user):
-        entry = list(self.time_cursor.execute("SELECT time_watched FROM time WHERE username = ?", (user,)))
+        entry = list(self.time_cursor.execute("SELECT time FROM time_watched WHERE username = ?", (user,)))
         return entry[0]
 
     def save_time_database(self):
@@ -949,35 +949,40 @@ class RankedBot(ViewTimeBot, CurrencyBot):
         """ Check if the user is already in the database """
         return bool(list(self.time_cursor.execute("SELECT * FROM user_ranks WHERE username = ? AND rank = ?", (user,rank))))
         
+    @asyncio.coroutine
     def autoset_user(self, user):
-            if not self.check_user_currency(user):
-                self.add_user_currency(user)
-            bal = self.get_currency(user)
-            if not self.check_user_time(user):
-                self.add_user_time(user)
-            time = self.get_time(user)
-            new_rank = None
-            for rank in list(self.time_cursor.execute("SELECT * FROM currency_ranks ORDER BY currency")):
-                cur = rank[0]
-                if cur <= bal:
-                    new_rank = rank[1]
-            for rank in list(self.time_cursor.execute("SELECT * FROM watched_ranks ORDER BY time")):
-                tim = rank[0]
-                if tim <= time:
-                    new_rank = rank[1]
-            if new_rank:
-                if not check_user_rank(user, new_rank):
-                    self.rank_cursor.execute("DELETE FROM user_ranks WHERE user = ?", (user,))
-                    self.rank_cursor.execute("INSERT INTO user_ranks VALUES (?,?)", (user, new_rank))
+        if not self.check_user_currency(user):
+            self.add_user_currency(user)
+        bal = self.get_currency(user)[0]
+        if not self.check_user_time(user):
+            self.add_user_time(user)
+        time = self.get_time(user)[0]
+        new_rank = None
+        for rank in list(self.rank_cursor.execute("SELECT * FROM currency_ranks ORDER BY currency")):
+            cur = rank[0]
+            if cur <= bal:
+                new_rank = rank[1]
+        for rank in list(self.rank_cursor.execute("SELECT * FROM watched_ranks ORDER BY time")):
+            tim = rank[0]
+            if tim <= time:
+                new_rank = rank[1]
+        if new_rank:
+            if not check_user_rank(user, new_rank):
+                self.rank_cursor.execute("DELETE FROM user_ranks WHERE user = ?", (user,))
+                self.rank_cursor.execute("INSERT INTO user_ranks VALUES (?,?)", (user, new_rank))
+            yield from self.event_rankup(user, new_rank)
 
-
+    @asyncio.coroutine
+    def event_rankup(self, user, rank):
+        pass
+                    
     @asyncio.coroutine
     def event_viewtime_update(self, users):
         for user in users:
-            if not self.check_user_currency():
+            if not self.check_user_currency(user):
                 self.add_user_currency(user)
             self.add_currency(user, self.autopoints)
-        self.save_points_database()
+        self.save_currency_database()
         
     def add_rank(self, name, points=0, time_watched=0, type_rank='points'):
         if type_rank == 'points':

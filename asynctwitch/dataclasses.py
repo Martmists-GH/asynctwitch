@@ -10,6 +10,13 @@ except ImportError:
     print("To use music, please install isodate. (pip install isodate)")
     iso_installed = False
 
+try:
+    import aiohttp
+    aio_installed = True
+except ImportError:
+    print("To use stats from the API, make sure to install aiohttp. (pip install aiohttp)")
+    aio_installed = False
+
 def _parse_badges(s):
     if not s:
         return
@@ -54,6 +61,7 @@ class Emote:
         self.url = "https://static-cdn.jtvnw.net/emoticons/v1/{}/3.0".format(id)
 
     def __str__(self):
+        global emotes
         if not aio_installed:
             raise Exception("Please install aiohttp to use this feature")
         else:
