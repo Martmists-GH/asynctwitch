@@ -19,18 +19,18 @@ except ImportError:
 
 def _parse_badges(s):
     if not s:
-        return
+        return []
     if "," in s:
         # multiple badges
         badges = s.split(",")
         return [Badge(*badge.split("/")) for badge in badges]
     else:
-        return Badge(*s.split("/"))
+        return [Badge(*s.split("/"))]
 
 def _parse_emotes(s):
     emotelist = [] # 25:8-12 354:14-18
     if not s:
-        return
+        return []
     if "/" in s:
         # multiple emotes
         emotes = s.split("/")
