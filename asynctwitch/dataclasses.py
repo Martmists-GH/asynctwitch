@@ -85,17 +85,38 @@ class Badge:
         return cls(n,v)
 
 class Color:
-    """ Available colors for non-turbo users when using Bot.color """
+    """ 
+	Available colors for non-turbo users when using Bot.color 
+	
+	Conversions still not working perfectly:
+	
+	>>> str( Color.blue() ) #0000FF 
+    '#0000ff'
+	
+	>>> str( Color.from_yiq( *Color.blue().to_yiq() ) ) #0000FF to and from yiq
+	'#0000fe'
+	
+	>>> str( Color.from_hsv( *Color.blue().to_hsv() ) ) #0000FF to and from hsv
+	'#00ffff'
+	
+	"""
     def __init__(self, value):
         if not value:
             value = 0
         elif isinstance(value, str):
             value = int(value.strip("#"), 16)
         self.value = value
-
-    def _get_part(self, byte):
+    def _get_rgb(self, byte):
         return (self.value >> (8 * byte)) & 0xff
-
+    def _get_yiq(self, rm, gm, bm, mode):
+        if mode == "y":
+            v1 = v2 = 1
+        elif mode == "i":
+            v1 = v2 = -1
+        elif mode == "q":
+            v1 = -1
+            v2 = 1
+        return round((rm * (self.r/255)) + v1*(gm * (self.g/255)) + v2*(bm * (self.b/255)), 3)
     def __eq__(self, clr):
         return isinstance(clr, Color) and self.value == clr.value
     def __ne__(self, clr):
@@ -116,16 +137,15 @@ class Color:
         )
     def blend(self, clr):
         return Color.from_rgb((self.r+clr.r)/2, (self.g+clr.g)/2, (self.b+clr.b)/2)
-
     @property
     def r(self):
-        return self._get_part(2)
+        return self._get_rgb(2)
     @property
     def g(self):
-        return self._get_part(1)
+        return self._get_rgb(1)
     @property
     def b(self):
-        return self._get_part(0)
+        return self._get_rgb(0)
     @r.setter
     def r(self, value):
         self = Color.from_rgb(value, self.g, self.b)
@@ -135,19 +155,30 @@ class Color:
     @b.setter
     def b(self, value):
         self = Color.from_rgb(self.r, self.g, value)
-
+    @property
+    def y(self):
+        return self._get_yiq(0.299, 0.587, 0.114, "y")
+    @property
+    def i(self):
+        return self._get_yiq(0.596, 0.275, 0.321, "i")
+    @property
+    def q(self):
+        return self._get_yiq(0.212, 0.528, 0.311, "q")
+    @y.setter
+    def y(self, value):
+        self = Color.from_yiq(value, self.i, self.q)
+    @i.setter
+    def i(self, value):
+        self = Color.from_yiq(self.y, value, self.q)
+    @q.setter
+    def q(self, value):
+        self = Color.from_yiq(self.y, self.i, value)
     def to_rgb(self):
         """ Returns an (r, g, b) tuple of the color """
         return (self.r, self.g, self.b)
     def to_yiq(self):
         """ Returns a (y, i, q) tuple of the color """
-        r = self.r / 255
-        g = self.g / 255
-        b = self.b / 255
-        y = (0.299 * r) + (0.587 * g) + (0.114 * b)
-        i = (0.596 * r) - (0.275 * g) - (0.321 * b)
-        q = (0.212 * r) - (0.528 * g) + (0.311 * b)
-        return (round(y, 3), round(i, 3), round(q, 3))
+        return (self.y, self.i, self.q)
     def to_hsv(self):
         """ Returns a (h, s, v) tuple of the color """
         r = self.r / 255
@@ -169,7 +200,6 @@ class Color:
         else:
             h = 60 * (((r - g) / delta) + 4)
         return (round(h, 3), round(s, 3), round(v, 3))
-
     @classmethod
     def blue(cls):
         return cls(0x0000FF)

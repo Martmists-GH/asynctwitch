@@ -125,6 +125,15 @@ class Bot:
 
         self.message_count = 1 # Just in case some get sent almost simultaneously even though they shouldn't
 
+        self.regex = {
+            "data":re.compile(r"^(?:@(?P<tags>\S+)\s)?:(?P<data>\S+)(?:\s)(?P<action>[A-Z]+)(?:\s#)(?P<channel>\S+)(?:\s(?::)?(?P<content>.+))?"),
+            "ping":re.compile("PING (?P<content>.+)"),
+            "author":re.compile("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
+                            "@(?P=author).tmi.twitch.tv"),
+            "mode":re.compile("(?P<mode>[\+\-])o (?P<user>.+)"),
+            "host":re.compile("(?P<channel>[a-zA-Z0-9_]+) (?P<count>[0-9\-]+)")
+        }
+        
         self.channel_stats = {}
 
         self.viewer_count = 0
@@ -418,10 +427,10 @@ class Bot:
             try:
 
                 if rdata.startswith("PING"):
-                    p = re.compile("PING (?P<content>.+)")
+                    p = self.regex["ping"]
                     
                 else:
-                    p = re.compile(r"^(?:@(?P<tags>\S+)\s)?:(?P<data>\S+)(?:\s)(?P<action>[A-Z]+)(?:\s#)(?P<channel>\S+)(?:\s(?::)?(?P<content>.+))?")
+                    p = self.regex["data"]
 
                 m = p.match(rdata)
 
@@ -470,9 +479,7 @@ class Bot:
                         yield from self._pong(content)
 
                     elif action == "PRIVMSG":
-                        sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
-                            "@(?P=author).tmi.twitch.tv", data).group("author")
-
+                        sender = self.regex["author"].match(data).group("author")
 
                         messageobj = Message(content, sender, tags)
 
@@ -481,8 +488,7 @@ class Bot:
                         yield from self.event_message(messageobj)
 
                     elif action == "WHISPER":
-                        sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
-                            "@(?P=author).tmi.twitch.tv", data).group("author")
+                        sender = self.regex["author"].match(data).group("author")
 
                         messageobj = Message(content, sender, tags)
 
@@ -491,21 +497,18 @@ class Bot:
                         yield from self.event_private_message(messageobj)
 
                     elif action == "JOIN":
-                        sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
-                            "@(?P=author).tmi.twitch.tv", data).group("author")
+                        sender = self.regex["author"].match(data).group("author")
 
                         yield from self.event_user_join(User(sender))
 
                     elif action == "PART":
-                        sender = re.match("(?P<author>[a-zA-Z0-9_]+)!(?P=author)"
-                            "@(?P=author).tmi.twitch.tv", data).group("author")
+                        sender = self.regex["author"].match(data).group("author")
 
                         yield from self.event_user_leave(User(sender))
 
                     elif action == "MODE":
 
-                        m = re.match("(?P<mode>[\+\-])o (?P<user>.+)",
-                                     content)
+                        m = self.regex["mode"].match(content)
                         mode = m.group("mode")
                         user = m.group("user")
 
@@ -539,8 +542,7 @@ class Bot:
                                 yield from self.event_ban(User(content), tags)
 
                     elif action == "HOSTTARGET":
-                        m = re.match("(?P<channel>[a-zA-Z0-9_]+) (?P<count>[0-9\-]+)",
-                                      content)
+                        m = self.regex["host"].match(content)
                         channel = m.group("channel")
                         viewers = m.group("count")
 
@@ -674,13 +676,13 @@ class Bot:
         Stops the bot and disables using it again.
         Useful for a restart command I guess
         """
-        
+
         if hasattr(self, "player"):
             self.player.terminate()
     
         if hasattr(self, "writer"):
             self.writer.close()
-            
+
         pending = asyncio.Task.all_tasks()
         gathered = asyncio.gather(*pending)
 
@@ -690,11 +692,11 @@ class Bot:
             gathered.exception()
         except: # Can be ignored
             pass
-        
+
         self.loop.stop()
-        
+
         if exit:
-            os._exit(0)
+            sys.exit(0)
 
     @asyncio.coroutine
     def play_file(self, file):
