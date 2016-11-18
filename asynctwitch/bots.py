@@ -94,7 +94,7 @@ class Bot:
 
     def __init__(self, *, oauth=None, user=None, channel="twitch",
                  prefix="!", admins=None, config=None, cache=100, 
-                 client_id=None):
+                 client_id=None, allow_streams=False):
 
         if config:
             self.load(config)
@@ -122,6 +122,7 @@ class Bot:
         self.song = Song()
         self.is_mod = False
         self.is_playing = False
+        self.allow_streams = allow_streams
 
         self.message_count = 1 # Just in case some get sent almost simultaneously even though they shouldn't
 
@@ -159,7 +160,6 @@ class Bot:
         self.chan = "#" + config.get("Settings", "channel", fallback="twitch")
         self.prefix = config.get("Settings", "prefix", fallback="!")
         self.client_id = config.get("Settings", "client_id", fallback=None)
-
 
     def override(self, coro):
         """ Allows for overriding certain functions """
@@ -715,13 +715,22 @@ class Bot:
                                                  ])
 
         j = json.loads(j.decode().strip())
-        t = math.ceil( float( j["format"]["duration"] ) ) + 2
-        if self.song == Song():
-            self.song.setattrs({
-                'title': ' '.join(file.split('.')[:-1]),
-                'duration': t
-            })
-        asyncio.ensure_future(self.song._play(file))
+        try:
+            t = math.ceil( float( j["format"]["duration"] ) ) + 2
+        except:
+            # Song is a stream
+            if not self.allow_streams:
+                return
+            else:
+                # TODO: Find a way to play streams, pass for now
+                pass
+        else:
+            if self.song == Song():
+                self.song.setattrs({
+                    'title': ' '.join(file.split('.')[:-1]),
+                    'duration': t
+                })
+            asyncio.ensure_future(self.song._play(file))
 
     @asyncio.coroutine
     def play_ytdl(self, query, *, filename="song.flac", options={}, play=True):
@@ -742,10 +751,7 @@ class Bot:
         }
         args.update(options)
         ytdl = youtube_dl.YoutubeDL(args)
-        if play:
-            func = functools.partial(ytdl.extract_info, query)
-        else:
-            func = functools.partial(ytdl.extract_info, query, download=False)
+        func = functools.partial(ytdl.extract_info, query, download=play)
         info = yield from self.loop.run_in_executor(None, func)
         try:
             info = info['entries'][0]
