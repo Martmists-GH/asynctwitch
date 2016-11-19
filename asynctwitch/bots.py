@@ -22,31 +22,29 @@ except ImportError:
     print("To use stats from the API, make sure to install aiohttp. (pip install aiohttp)")
     aio_installed = False
 
-def _setup_points_db(file):
-    open(file,'a').close()
-    connection = sqlite3.connect(file)
-    cursor = connection.cursor()
-    cursor.execute("CREATE TABLE currency (username VARCHAR(30), balance INT)")
-    connection.commit()
-    connection.close()
+def db_setup(func): # easy wrapper for setring up databases
+    def inner(file):
+        open(file, 'a').close()
+        con = sqlite3.connect(file)
+        c = con.cursor()
+        func(c)
+        con.commit()
+        con.close()
+    return inner
 
-def _setup_ranks_db(file):
-    open(file,'a').close()
-    connection = sqlite3.connect(file)
-    cursor = connection.cursor()
+@db_setup
+def _setup_points_db(cursor):
+    cursor.execute("CREATE TABLE currency (username VARCHAR(30), balance INT)")
+
+@db_setup
+def _setup_ranks_db(cursor):
     cursor.execute("CREATE TABLE user_ranks (username VARCHAR(30), rankname TEXT)")
     cursor.execute("CREATE TABLE currency_ranks (currency INT, rankname TEXT)")
     cursor.execute("CREATE TABLE watched_ranks (time INT, rankname TEXT)")
-    connection.commit()
-    connection.close()
 
-def _setup_time_db(file):
-    open(file,'a').close()
-    connection = sqlite3.connect(file)
-    cursor = connection.cursor()
+@db_setup
+def _setup_time_db(cursor):
     cursor.execute("CREATE TABLE time_watched (username VARCHAR(30), time INT)")
-    connection.commit()
-    connection.close()
     
 @asyncio.coroutine
 def _get_url(loop, url):
