@@ -222,11 +222,15 @@ class Bot:
                 traceback.print_exc()
             yield from asyncio.sleep(60)
 
-    def start(self):
+    def start(self, tasked=False):
         """ Starts the event loop, this blocks all other code below it from executing """
         if self.client_id is not None:
             self.loop.create_task(self._get_stats())
-        self.loop.run_until_complete(self._tcp_echo_client())
+            
+        if tasked:
+            self.loop.create_task(self._tcp_echo_client())
+        else:
+            self.loop.run_until_complete(self._tcp_echo_client())
 
     @asyncio.coroutine
     def _pong(self, src):
