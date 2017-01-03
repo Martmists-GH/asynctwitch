@@ -11,3 +11,5 @@ settings.ini
 .tox/
 *.db
 *.db-journal
+dist/*
+build/*

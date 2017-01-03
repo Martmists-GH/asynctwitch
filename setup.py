@@ -22,14 +22,14 @@ setup(
     license='BSD-3-Clause',
 
     classifiers=[
-        'Development Status :: 5 - Stable',
+        'Development Status :: 5 - Production/Stable',
 
         'Intended Audience :: Developers',
-        'Topic :: Software Development :: Twitch Bot',
+        'Topic :: Communications :: Chat',
 
-        'License :: OSI Approved :: BSD-3-Clause License',
+        'License :: OSI Approved :: BSD License',
 
-        'Programming Language :: Python :: 3.4+',
+        'Programming Language :: Python :: 3.4',
     ],
     install_requires=[
         'aiohttp',
