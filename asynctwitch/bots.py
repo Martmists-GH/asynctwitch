@@ -166,7 +166,7 @@ class Bot:
 
         self.hosts = {}
 
-        self.messages = {}
+        self.messages = []
         self.channel_moderators = {}
             
         for c in self.chan:
@@ -178,7 +178,7 @@ class Bot:
             self.viewers[c] = {}
 
             self.hosts[c] = []
-            self.messages[c] = []
+
             self.channel_moderators[c] = []
 
     def debug(self):
