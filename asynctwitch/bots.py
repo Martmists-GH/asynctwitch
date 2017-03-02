@@ -157,30 +157,29 @@ class Bot:
                 "(?P<channel>[a-zA-Z0-9_]+) "
                 "(?P<count>[0-9\-]+)")}
 
-            self.channel_stats = {}
+        self.channel_stats = {}
 
-            self.viewer_count = {}
-            self.host_count = {}
+        self.viewer_count = {}
+        self.host_count = {}
 
-            self.viewers = {}
+        self.viewers = {}
 
-            self.hosts = {}
+        self.hosts = {}
 
-            self.messages = {}
-            self.channel_moderators = {}
+        self.messages = {}
+        self.channel_moderators = {}
             
-            for c in self.chan:
-                self.channel_stats[c] = {}
+        for c in self.chan:
+            self.channel_stats[c] = {}
 
-                self.viewer_count[c] = 0
-                self.host_count[c] = 0
+            self.viewer_count[c] = 0
+            self.host_count[c] = 0
 
-                self.viewers[c] = {}
+            self.viewers[c] = {}
 
-                self.hosts[c] = []
-
-                self.messages[c] = []
-                self.channel_moderators[c] = []
+            self.hosts[c] = []
+            self.messages[c] = []
+            self.channel_moderators[c] = []
 
     def debug(self):
         for x, y in self.__dict__.items():
