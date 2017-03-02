@@ -115,7 +115,10 @@ class Bot:
             self.prefix = prefix
             self.oauth = oauth
             self.nick = user.lower()
-            self.chan = "#" + channel.lower().strip('#')
+            if isinstance(channel, str):
+                self.chan = ["#" + channel.lower().strip('#')]
+            else:
+                self.chan = ["#" + c.lower().strip('#') for c in channel]
             self.client_id = client_id
 
         if os.name == 'nt':
@@ -154,17 +157,30 @@ class Bot:
                 "(?P<channel>[a-zA-Z0-9_]+) "
                 "(?P<count>[0-9\-]+)")}
 
-        self.channel_stats = {}
+            self.channel_stats = {}
 
-        self.viewer_count = 0
-        self.host_count = 0
+            self.viewer_count = {}
+            self.host_count = {}
 
-        self.viewers = {}
+            self.viewers = {}
 
-        self.hosts = []
+            self.hosts = {}
 
-        self.messages = []
-        self.channel_moderators = []
+            self.messages = {}
+            self.channel_moderators = {}
+            
+            for c in self.chan:
+                self.channel_stats[c] = {}
+
+                self.viewer_count[c] = 0
+                self.host_count[c] = 0
+
+                self.viewers[c] = {}
+
+                self.hosts[c] = []
+
+                self.messages[c] = []
+                self.channel_moderators[c] = []
 
     def debug(self):
         for x, y in self.__dict__.items():
@@ -203,50 +219,51 @@ class Bot:
 
         while True:
             try:
-                j = yield from _get_url(
-                    self.loop,
-                    'https://api.twitch.tv/kraken/channels/{}?client_id={}'
-                    .format(self.chan[1:], self.client_id))
-                self.channel_stats = {
-                    'mature': j['mature'],
-                    'title': j['status'],
-                    'game': j['game'],
-                    'id': j['_id'],
-                    'created_at': time.mktime(
-                        time.strptime(
-                            j['created_at'],
-                            '%Y-%m-%dT%H:%M:%SZ')),
-                    'updated_at': time.mktime(
-                        time.strptime(
-                            j['updated_at'],
-                            '%Y-%m-%dT%H:%M:%SZ')),
-                    'delay': j['delay'],
-                    'offline_logo': j['video_banner'],
-                    'profile_picture': j['logo'],
-                    'profile_banner': j['profile_banner'],
-                    'twitch_partner': j['partner'],
-                    'views': j['views'],
-                    'followers': j['followers']}
+                for c in self.chan:
+                    j = yield from _get_url(
+                        self.loop,
+                        'https://api.twitch.tv/kraken/channels/{}?client_id={}'
+                        .format(c[1:], self.client_id))
+                    self.channel_stats[c] = {
+                        'mature': j['mature'],
+                        'title': j['status'],
+                        'game': j['game'],
+                        'id': j['_id'],
+                        'created_at': time.mktime(
+                            time.strptime(
+                                j['created_at'],
+                                '%Y-%m-%dT%H:%M:%SZ')),
+                        'updated_at': time.mktime(
+                            time.strptime(
+                                j['updated_at'],
+                                '%Y-%m-%dT%H:%M:%SZ')),
+                        'delay': j['delay'],
+                        'offline_logo': j['video_banner'],
+                        'profile_picture': j['logo'],
+                        'profile_banner': j['profile_banner'],
+                        'twitch_partner': j['partner'],
+                        'views': j['views'],
+                        'followers': j['followers']}
 
-                j = yield from _get_url(
-                    self.loop,
-                    'https://tmi.twitch.tv/hosts?target={}&include_logins=1'
-                    .format(j['_id']))
-                self.host_count = len(j['hosts'])
-                self.hosts = [x['host_login'] for x in j['hosts']]
+                    j = yield from _get_url(
+                        self.loop,
+                        'https://tmi.twitch.tv/hosts?target={}&include_logins=1'
+                        .format(j['_id']))
+                    self.host_count[c] = len(j['hosts'])
+                    self.hosts[c] = [x['host_login'] for x in j['hosts']]
 
-                j = yield from _get_url(
-                    self.loop,
-                    'https://tmi.twitch.tv/group/user/{}/chatters'
-                    .format(self.chan[1:]))
-                self.viewer_count = j['chatter_count']
-                self.channel_moderators = j['chatters']['moderators']
-                self.viewers['viewers'] = j['chatters']['viewers']
-                self.viewers['moderators'] = j['chatters']['moderators']
-                self.viewers['staff'] = j['chatters']['staff']
-                self.viewers['admins'] = j['chatters']['admins']
-                self.viewers['global_moderators'] = j[
-                    'chatters']['global_mods']
+                    j = yield from _get_url(
+                        self.loop,
+                        'https://tmi.twitch.tv/group/user/{}/chatters'
+                        .format(c[1:]))
+                    self.viewer_count[c] = j['chatter_count']
+                    self.channel_moderators[c] = j['chatters']['moderators']
+                    self.viewers[c]['viewers'] = j['chatters']['viewers']
+                    self.viewers[c]['moderators'] = j['chatters']['moderators']
+                    self.viewers[c]['staff'] = j['chatters']['staff']
+                    self.viewers[c]['admins'] = j['chatters']['admins']
+                    self.viewers[c]['global_moderators'] = j[
+                        'chatters']['global_mods']
 
             except Exception:
                 traceback.print_exc()
@@ -299,9 +316,9 @@ class Bot:
         self.writer.write("PASS {}\r\n".format(self.oauth).encode('utf-8'))
 
     @asyncio.coroutine
-    def _join(self):
+    def _join(self, channel):
         """ Join a channel """
-        self.writer.write("JOIN {}\r\n".format(self.chan).encode('utf-8'))
+        self.writer.write("JOIN {}\r\n".format(channel).encode('utf-8'))
 
     @asyncio.coroutine
     def _part(self):
@@ -451,7 +468,8 @@ class Bot:
         for m in modes:
             yield from self._special(m)
 
-        yield from self._join()
+        for c in self.chan:
+            yield from self._join(c)
 
         while True:
             rdata = (yield from self.reader.readline()).decode("utf-8").strip()
