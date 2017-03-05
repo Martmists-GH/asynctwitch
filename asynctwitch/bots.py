@@ -340,7 +340,7 @@ class Bot:
     def _send_privmsg(self, channel, s):
         """ DO NOT USE THIS YOURSELF OR YOU RISK GETTING BANNED FROM TWITCH """
         s = s.replace("\n", " ")
-        self.writer.write("PRIVMSG {} :{}\r\n".format(
+        self.writer.write("PRIVMSG #{} :{}\r\n".format(
             channel, s).encode('utf-8'))
 
     # The following are Twitch commands, such as /me, /ban and /host, so I'm
