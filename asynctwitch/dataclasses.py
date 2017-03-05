@@ -408,8 +408,9 @@ class Song:
 class User:
     """ Custom author class """
 
-    def __init__(self, a, tags=None):
+    def __init__(self, a, channel, tags=None):
         self.name = a
+        self.channel = channel
         if tags:
             self.badges = _parse_badges(tags['badges'])
             self.color = Color(tags['color'])
@@ -426,7 +427,7 @@ class User:
 class Message:
     """ Custom message object to combine message, author and timestamp """
 
-    def __init__(self, m, a, tags):
+    def __init__(self, m, a, channel, tags):
         if tags:
             self.raw_timestamp = tags['tmi-sent-ts']
             self.timestamp = datetime.datetime.fromtimestamp(
@@ -435,7 +436,8 @@ class Message:
             self.id = uuid.UUID(tags['id'])
             self.room_id = tags['room-id']
         self.content = m
-        self.author = User(a, tags)
+        self.author = User(a, channel, tags)
+        self.channel = channel
 
     def __str__(self):
         return self.content

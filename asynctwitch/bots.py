@@ -76,12 +76,12 @@ def _decrease_msgcount(self):
     self.message_count -= 1
 
 
-def create_timer(message, time):
+def create_timer(message, channel, time):
     @asyncio.coroutine
     def wrapper(self):
         while True:
             yield from asyncio.sleep(time)
-            yield from self.say(message)
+            yield from self.say(channel, message)
     return wrapper
 
 
@@ -289,7 +289,7 @@ class Bot:
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def say(self, *args):
+    def say(self, channel, *args):
         """ Send messages """
         msg = " ".join(str(arg) for arg in args)
 
@@ -302,7 +302,7 @@ class Bot:
         while msg.startswith("."):  # Use Bot.ban, Bot.timeout, etc instead
             msg = msg[1:]
 
-        yield from self._send_privmsg(msg)
+        yield from self._send_privmsg(channel, msg)
 
     @asyncio.coroutine
     def _nick(self):
@@ -337,11 +337,11 @@ class Bot:
             self.messages.pop(0)
 
     @asyncio.coroutine
-    def _send_privmsg(self, s):
+    def _send_privmsg(self, channel, s):
         """ DO NOT USE THIS YOURSELF OR YOU RISK GETTING BANNED FROM TWITCH """
         s = s.replace("\n", " ")
         self.writer.write("PRIVMSG {} :{}\r\n".format(
-            self.chan, s).encode('utf-8'))
+            channel, s).encode('utf-8'))
 
     # The following are Twitch commands, such as /me, /ban and /host, so I'm
     # not going to put docstrings on these
@@ -352,34 +352,34 @@ class Bot:
     @ratelimit_wrapper
     @asyncio.coroutine
     def ban(self, user, reason=''):
-        yield from self._send_privmsg(".ban {} {}".format(user, reason))
+        yield from self._send_privmsg(user.channel, ".ban {} {}".format(user.name, reason))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def unban(self, user):
-        yield from self._send_privmsg(".unban {}".format(user))
+        yield from self._send_privmsg(user.channel, ".unban {}".format(user.name))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def timeout(self, user, seconds=600, reason=''):
-        yield from self._send_privmsg(".timeout {} {} {}".format(user, seconds,
+        yield from self._send_privmsg(user.channel, ".timeout {} {} {}".format(user.name, seconds,
                                                                  reason))
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def me(self, text):
-        yield from self._send_privmsg(".me {}".format(text))
+    def me(self, channel, text):
+        yield from self._send_privmsg(channel, ".me {}".format(text))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def whisper(self, user, msg):
         msg = str(msg)
-        yield from self._send_privmsg(".w {} {}".format(user, msg))
+        yield from self._send_privmsg(user.channel, ".w {} {}".format(user.name, msg))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def color(self, color):
-        yield from self._send_privmsg(".color {}".format(color))
+        yield from self._send_privmsg(random.choice(self.channel), ".color {}".format(color))
 
     @asyncio.coroutine
     def colour(self, colour):
@@ -388,67 +388,67 @@ class Bot:
     @ratelimit_wrapper
     @asyncio.coroutine
     def mod(self, user):
-        yield from self._send_privmsg(".mod {}".format(user))
+        yield from self._send_privmsg(user.channel, ".mod {}".format(user.name))
 
     @ratelimit_wrapper
     @asyncio.coroutine
     def unmod(self, user):
-        yield from self._send_privmsg(".unmod {}".format(user))
+        yield from self._send_privmsg(user.channel, ".unmod {}".format(user.name))
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def clear(self):
-        yield from self._send_privmsg(".clear")
+    def clear(self, channel):
+        yield from self._send_privmsg(channel, ".clear")
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def subscribers_on(self):
-        yield from self._send_privmsg(".subscribers")
+    def subscribers_on(self, channel):
+        yield from self._send_privmsg(channel, ".subscribers")
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def subscribers_off(self):
-        yield from self._send_privmsg(".subscribersoff")
+    def subscribers_off(self, channel):
+        yield from self._send_privmsg(channel, ".subscribersoff")
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def slow_on(self):
-        yield from self._send_privmsg(".slow")
+    def slow_on(self, channel):
+        yield from self._send_privmsg(channel, ".slow")
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def slow_off(self):
-        yield from self._send_privmsg(".slowoff")
+    def slow_off(self, channel):
+        yield from self._send_privmsg(channel, ".slowoff")
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def r9k_on(self):
-        yield from self._send_privmsg(".r9k")
+    def r9k_on(self, channel):
+        yield from self._send_privmsg(channel, ".r9k")
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def r9k_off(self):
-        yield from self._send_privmsg(".r9koff")
+    def r9k_off(self, channel):
+        yield from self._send_privmsg(channel, ".r9koff")
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def emote_only_on(self):
-        yield from self._send_privmsg(".emoteonly")
+    def emote_only_on(self, channel):
+        yield from self._send_privmsg(channel, ".emoteonly")
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def emote_only_off(self):
-        yield from self._send_privmsg(".emoteonlyoff")
+    def emote_only_off(self, channel):
+        yield from self._send_privmsg(channel, ".emoteonlyoff")
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def host(self, user):
-        yield from self._send_privmsg(".host {}".format(user))
+    def host(self, channel, user):
+        yield from self._send_privmsg(channel, ".host {}".format(user))
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def unhost(self):
-        yield from self._send_privmsg(".unhost")
+    def unhost(self, channel):
+        yield from self._send_privmsg(channel, ".unhost")
 
     # End of Twitch commands
 
@@ -536,7 +536,7 @@ class Bot:
                         sender = self.regex["author"].match(
                             data).group("author")
 
-                        messageobj = Message(content, sender, tags)
+                        messageobj = Message(content, sender, channel, tags)
 
                         yield from self._cache(messageobj)
 
@@ -546,7 +546,7 @@ class Bot:
                         sender = self.regex["author"].match(
                             data).group("author")
 
-                        messageobj = Message(content, sender, tags)
+                        messageobj = Message(content, sender, channel, tags)
 
                         yield from self._cache(messageobj)
 
@@ -556,13 +556,13 @@ class Bot:
                         sender = self.regex["author"].match(
                             data).group("author")
 
-                        yield from self.event_user_join(User(sender))
+                        yield from self.event_user_join(User(sender, channel))
 
                     elif action == "PART":
                         sender = self.regex["author"].match(
                             data).group("author")
 
-                        yield from self.event_user_leave(User(sender))
+                        yield from self.event_user_leave(User(sender, channel))
 
                     elif action == "MODE":
 
@@ -571,9 +571,9 @@ class Bot:
                         user = m.group("user")
 
                         if mode == "+":
-                            yield from self.event_user_op(User(user))
+                            yield from self.event_user_op(User(user, channel))
                         else:
-                            yield from self.event_user_deop(User(user))
+                            yield from self.event_user_deop(User(user, channel))
 
                     elif action == "USERSTATE":
 
@@ -582,7 +582,7 @@ class Bot:
                         else:
                             self.is_mod = False
 
-                        yield from self.event_userstate(User(self.nick, tags))
+                        yield from self.event_userstate(User(self.nick, channel, tags))
 
                     elif action == "ROOMSTATE":
                         yield from self.event_roomstate(tags)
@@ -596,10 +596,10 @@ class Bot:
                         else:
                             if "ban-duration" in tags.keys():
                                 yield from self.event_timeout(
-                                    User(content), tags)
+                                    User(content, channel), tags)
                             else:
                                 yield from self.event_ban(
-                                    User(content), tags)
+                                    User(content, channel), tags)
 
                     elif action == "HOSTTARGET":
                         m = self.regex["host"].match(content)
@@ -616,7 +616,7 @@ class Bot:
                         user = tags["login"]
 
                         yield from self.event_subscribe(
-                            Message(message, user, tags), tags)
+                            Message(message, user, channel, tags), tags)
 
                     elif action == "CAP":
                         # We don"t need this for anything, so just ignore it
