@@ -1,0 +1,276 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Bot &mdash; asynctwitch 4.1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '4.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="asynctwitch 4.1.0 documentation" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="bot">
+<h1>Bot<a class="headerlink" href="#bot" title="Permalink to this headline">¶</a></h1>
+<dl class="class">
+<dt id="asynctwitch.Bot">
+<em class="property">class </em><code class="descclassname">asynctwitch.</code><code class="descname">Bot</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot" title="Permalink to this definition">¶</a></dt>
+<dd><p>A basic Bot. All others inherit from this.</p>
+<dl class="docutils">
+<dt>oauth</dt>
+ <span class="classifier-delimiter">:</span> <span class="classifier">Required[str]</span><dd>The oauth code for your account</dd>
+<dt>user</dt>
+ <span class="classifier-delimiter">:</span> <span class="classifier">Required[str]</span><dd>Your username</dd>
+<dt>prefix</dt>
+ <span class="classifier-delimiter">:</span> <span class="classifier">Optional[str]</span><dd>The prefix for the bot to listen to. (default: <cite>!</cite>)</dd>
+<dt>channel</dt>
+ <span class="classifier-delimiter">:</span> <span class="classifier">Optional[str, list]</span><dd>The channel(s) to serve. (default: <cite>twitch</cite>)</dd>
+<dt>client_id</dt>
+ <span class="classifier-delimiter">:</span> <span class="classifier">Optional[str]</span><dd>The application Client ID for the kraken API.</dd>
+<dt>cache</dt>
+ <span class="classifier-delimiter">:</span> <span class="classifier">Optional[int]</span><dd>The amount of messages to cache. (default: 100)</dd>
+<dt>admins</dt>
+ <span class="classifier-delimiter">:</span> <span class="classifier">Optional[list]</span><dd>The usernames with full access to the bot.</dd>
+<dt>allow_streams</dt>
+ <span class="classifier-delimiter">:</span> <span class="classifier">Optional[bool]</span><dd>Allow music to play continuous streams</dd>
+</dl>
+<dl class="method">
+<dt id="asynctwitch.Bot.event_ban">
+<code class="descname">event_ban</code><span class="sig-paren">(</span><em>user</em>, <em>tags</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_ban" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when a user is banned.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_clear">
+<code class="descname">event_clear</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_clear" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when chat is cleared normally</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_host_start">
+<code class="descname">event_host_start</code><span class="sig-paren">(</span><em>channel</em>, <em>viewercount</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_host_start" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when the streamer starts hosting.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_host_stop">
+<code class="descname">event_host_stop</code><span class="sig-paren">(</span><em>viewercount</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_host_stop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when the streamer stops hosting.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_message">
+<code class="descname">event_message</code><span class="sig-paren">(</span><em>rm</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when a message is sent</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_notice">
+<code class="descname">event_notice</code><span class="sig-paren">(</span><em>tags</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_notice" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called on NOTICE events (when commands are called)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_private_message">
+<code class="descname">event_private_message</code><span class="sig-paren">(</span><em>rm</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_private_message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called on a private message</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_roomstate">
+<code class="descname">event_roomstate</code><span class="sig-paren">(</span><em>tags</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_roomstate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Triggered when channel chat settings change.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_subscribe">
+<code class="descname">event_subscribe</code><span class="sig-paren">(</span><em>message</em>, <em>tags</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_subscribe" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when someone (re-)subscribes.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_timeout">
+<code class="descname">event_timeout</code><span class="sig-paren">(</span><em>user</em>, <em>tags</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_timeout" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when a user is timed out.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_user_deop">
+<code class="descname">event_user_deop</code><span class="sig-paren">(</span><em>user</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_user_deop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when a user is de-opped</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_user_join">
+<code class="descname">event_user_join</code><span class="sig-paren">(</span><em>user</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_user_join" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when a user joins</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_user_leave">
+<code class="descname">event_user_leave</code><span class="sig-paren">(</span><em>user</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_user_leave" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when a user leaves</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_user_op">
+<code class="descname">event_user_op</code><span class="sig-paren">(</span><em>user</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_user_op" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when a user is opped</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.event_userstate">
+<code class="descname">event_userstate</code><span class="sig-paren">(</span><em>User</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.event_userstate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Triggered when the bot sends a message.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.load">
+<code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.load" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="method">
+<dt>
+<code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Param:</th><td class="field-body"><cite>path</cite> - path to a config file</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.override">
+<code class="descname">override</code><span class="sig-paren">(</span><em>coro</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.override" title="Permalink to this definition">¶</a></dt>
+<dd><p>Allows for overriding certain functions</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.parse_error">
+<code class="descname">parse_error</code><span class="sig-paren">(</span><em>e</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.parse_error" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when something errors</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.play_file">
+<code class="descname">play_file</code><span class="sig-paren">(</span><em>file</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.play_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plays audio.
+For this to work, ffplay, ffmpeg and ffprobe are required.
+These are downloadable from the ffmpeg website,
+and have to be in the same folder as the bot OR added to path.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.play_ytdl">
+<code class="descname">play_ytdl</code><span class="sig-paren">(</span><em>query</em>, <em>*</em>, <em>filename='song.flac'</em>, <em>options={}</em>, <em>play=True</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.play_ytdl" title="Permalink to this definition">¶</a></dt>
+<dd><p>Requires youtube_dl to be installed
+<cite>pip install youtube_dl</cite></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.raw_event">
+<code class="descname">raw_event</code><span class="sig-paren">(</span><em>data</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.raw_event" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called on all events after event_ready</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.start">
+<code class="descname">start</code><span class="sig-paren">(</span><em>tasked=False</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.start" title="Permalink to this definition">¶</a></dt>
+<dd><p>Starts the bot.
+This blocks all other code below it from executing,
+unless <cite>tasked</cite> is set to True</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="asynctwitch.Bot.stop">
+<code class="descname">stop</code><span class="sig-paren">(</span><em>exit=False</em><span class="sig-paren">)</span><a class="headerlink" href="#asynctwitch.Bot.stop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stops the bot and disables using it again.
+Useful for a restart command I guess</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/api.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, martmists.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.4.5</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+      |
+      <a href="_sources/api.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
