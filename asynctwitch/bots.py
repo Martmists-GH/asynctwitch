@@ -102,42 +102,62 @@ def ratelimit_wrapper(coro):
 
 
 class Bot:
-    """ Bot class without command support """
+    """
+    A basic Bot. All others inherit from this.
+    
+    Parameters
+    ----------
+    oauth : Required[str]
+        The oauth code for your account
+    user : Required[str]
+        Your username
+    prefix : Optional[str]
+        The prefix for the bot to listen to. (default: `!`)
+    channel : Optional[str, list]
+        The channel(s) to serve. (default: `twitch`)
+    client_id : Optional[str]
+        The application Client ID for the kraken API.
+    cache : Optional[int]
+        The amount of messages to cache. (default: 100)
+    admins : Optional[list]
+        The usernames with full access to the bot.
+    allow_streams : Optional[bool]
+        Allow music to play continuous streams
+    """
 
-    def __init__(self, *, oauth=None, user=None, channel="twitch",
-                 prefix="!", admins=None, config=None, cache=100,
-                 client_id=None, allow_streams=False):
+    def __init__(self, **kwargs):
 
-        if config:
-            self.load(config)
+        if kwargs.get("config"):
+            self.load(kwargs.get("config"))
 
         else:
-            self.prefix = prefix
-            self.oauth = oauth
+            self.prefix = kwargs.get("prefix") or "!"
+            self.oauth = kwargs.get("oauth")
             self.nick = user.lower()
+            channel = kwargs.get("channel") or "twitch"
             if isinstance(channel, str):
                 self.chan = ["#" + channel.lower().strip('#')]
             else:
                 self.chan = ["#" + c.lower().strip('#') for c in channel]
-            self.client_id = client_id
+            self.client_id = kwargs.get("client_id")
 
         if os.name == 'nt':
             self.loop = asyncio.ProactorEventLoop()
         else:
             self.loop = asyncio.get_event_loop()
 
-        self.cache_length = cache
+        self.cache_length = kwargs.get("cache") or 100
 
         asyncio.set_event_loop(self.loop)
         self.host = "irc.chat.twitch.tv"
         self.port = 6667
 
-        self.admins = admins or []
+        self.admins = kwargs.get("admins") or []
 
         self.song = Song()
         self.is_mod = False
         self.is_playing = False
-        self.allow_streams = allow_streams
+        self.allow_streams = kwargs.get("allow_streams")
 
         # Just in case some get sent almost simultaneously even though they
         # shouldn't
@@ -186,7 +206,12 @@ class Bot:
             print(x, y)
 
     def load(self, path):
-        """ Loads settings from file """
+        """
+        .. method:: load(path)
+        
+        :param: `path` - path to a config file
+
+        """
         config = configparser.ConfigParser(interpolation=None)
         config.read(path)
         self.oauth = config.get("Settings", "oauth", fallback=None)
@@ -670,12 +695,6 @@ class Bot:
     def event_roomstate(self, tags):
         """
         Triggered when channel chat settings change.
-
-        Example of what `tags` returns:
-
-        {
-            "emote-only": 0
-        }
         """
         pass
 
