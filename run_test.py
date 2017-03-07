@@ -24,7 +24,7 @@ async def raw_event(data):
 
 
 @bot.override
-async def event_roomstate(tags):
+async def event_roomstate(channel, tags):
     bot.stop(exit=True)
     print('Failed to exit!')
 
