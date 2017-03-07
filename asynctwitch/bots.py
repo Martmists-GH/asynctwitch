@@ -896,14 +896,14 @@ class Bot:
         pass
 
     @asyncio.coroutine
-    def event_roomstate(self, tags):
+    def event_roomstate(self, channel, tags):
         """
         Triggered when a channel's chat settings change.
         """
         pass
 
     @asyncio.coroutine
-    def event_userstate(self, User):
+    def event_userstate(self, user):
         """
         Triggered when the bot sends a message.
         """
