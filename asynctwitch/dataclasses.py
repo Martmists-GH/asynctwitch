@@ -58,9 +58,27 @@ def _parse_emotes(s):
             emotelist.append(Emote(emote_id, locations))
     return emotelist
 
+class Object:
+    """
+    An object that may be created as substitute for functions.
+    """
+    def __init__(self, **kwargs):
+        for k,v in kwargs.items():
+            setattr(self, k, v)
 
 class Emote:
-
+    """
+    A class to hold emote data
+    
+    Attributes
+    ----------
+    id : int
+        The ID of the emote.
+    location : str
+        The location of the emote in the message.
+    url : str
+        The url of the emote.
+    """
     def __init__(self, id, loc):
         self.id = int(id)
         self.location = loc
@@ -79,7 +97,16 @@ class Emote:
 
 
 class Badge:
-
+    """
+    A class to hold badge data.
+    
+    Attributes
+    ----------
+    name : str
+        Name of the badge.
+    value : str
+        Variant of the badge.
+    """
     def __init__(self, name, value):
         self.name = name
         self.value = value
@@ -96,12 +123,14 @@ class Badge:
 
 class Color:
     """
-        Available colors for non-turbo users when using Bot.color
+    Available colors for non-turbo users when using Bot.color
 
-        Conversions still not working perfectly:
+    Conversions are not working perfectly:
+
+    .. code-block:: python
 
         >>> str( Color.blue() ) #0000FF
-    '#0000ff'
+        '#0000ff'
 
         #0000FF to and from yiq
         >>> str( Color.from_yiq( *Color.blue().to_yiq() ) )
@@ -110,7 +139,6 @@ class Color:
         #0000FF to and from hsv
         >>> str( Color.from_hsv( *Color.blue().to_hsv() ) )
         '#00ffff'
-
         """
 
     def __init__(self, value):
@@ -360,7 +388,14 @@ class Color:
 
 
 class Song:
-    """ Contains information about a mp3 file """
+    """
+    Contains information about a song
+    
+    Attributes
+    ----------
+    title : str
+        The title of the song
+    """
 
     def __init__(self):
         self.title = ""  # In case setattrs() isn't called
@@ -406,7 +441,7 @@ class Song:
 
 
 class User:
-    """ Custom author class """
+    """ Custom user class """
 
     def __init__(self, a, channel, tags=None):
         self.name = a
@@ -446,17 +481,14 @@ class Message:
 class Command:
     """ A command class to provide methods we can use with it """
 
-    def __init__(self, bot, comm, *, alias=None, desc="",
-                 admin=False, unprefixed=False, listed=True):
-
-        self.bot = bot
+    def __init__(self, bot, comm, desc='', *alias, admin=False, unprefixed=False, listed=True, has=""):
         self.comm = comm
         self.desc = desc
-        self.alias = alias or []
+        self.alias = alias
         self.admin = admin
         self.listed = listed
         self.unprefixed = unprefixed
-        self.subcommands = []
+        self.subcommands = {}
         bot.commands[comm] = self
         for a in self.alias:
             bot.commands[a] = self
@@ -475,61 +507,73 @@ class Command:
     @asyncio.coroutine
     def run(self, message):
         """ Does type checking for command arguments """
-
-        args = message.content.split(" ")[1:]
+        if self.has != '':
+            if getattr(message.channel.permissions_for(message.author), self.has) is False and message.author.id not in self.cog.bot.admins:
+                yield from self.cog.bot.send_message(message.channel, "You do not have permission to use this command. Required permission: `{}`".format(self.has.replace("_", " ")))
+                return
+    
+        args = message.content[len(self.cog.bot.prefix):].split(" ")[1:]
 
         args_name = inspect.getfullargspec(self.func)[0][1:]
-
+        
         if len(args) > len(args_name):
-            args[len(args_name) - 1] = " ".join(args[len(args_name) - 1:])
-
+            args[len(args_name)-1] = " ".join(args[len(args_name)-1:])
+            
             args = args[:len(args_name)]
-
-        elif len(args) < len(args_name):
-            raise Exception(
-                "Not enough arguments for {}, required arguments: {}" .format(
-                    self.comm, ", ".join(args_name)))
-
+            
         ann = self.func.__annotations__
-
+        
         for x in range(0, len(args_name)):
-            v = args[x]
-            k = args_name[x]
-
-            if type(v) == ann[k]:
-                pass
-
+            try:
+                v = args[x]
+                k = args_name[x]
+                
+                if not type(v) == ann[k]:
+                    try:
+                        v = ann[k](v)
+                        
+                    except Exception: 
+                        raise TypeError("Invalid type: got {}, {} expected"
+                            .format(ann[k].__name__, v.__name__))
+                        
+                args[x] = v
+            except IndexError:
+                break
+                
+        if len(list(self.subcommands.keys()))>0:
+            try:
+                subcomm = args.pop(0).split(" ")[0]
+            except Exception:
+                yield from self.func(message, *args)
+                return
+            if subcomm in self.subcommands.keys():
+                c = message.content.split(" ")
+                c.pop(1)
+                message.content = " ".join(c)
+                yield from self.subcommands[subcomm].run(message)
+            
             else:
-                try:
-                    v = ann[k](v)
-
-                except:
-                    raise TypeError("Invalid type: got {}, {} expected"
-                                    .format(ann[k].__name__, v.__name__))
-
-            args[x] = v
-
-        if len(self.subcommands) > 0:
-            subcomm = args.pop(0)
-
-            for s in self.subcommands:
-                if subcomm == s.comm:
-                    c = message.content.split(" ")
-                    message.content = c[0] + " " + " ".join(c[2:])
-
-                    yield from s.run(message)
-                    break
-
+                yield from self.func(message, *args)
+            
         else:
-            yield from self.func(message, *args)
+            try:
+                yield from self.func(message, *args)
+            except TypeError as e:
+                if len(args) < len(args_name):
+                    raise Exception("Not enough arguments for {}, required arguments: {}"
+                        .format(self.comm, ", ".join(args_name)))
+                else:
+                    raise e
 
 
 class SubCommand(Command):
     """ Subcommand class """
-
-    def __init__(self, parent, comm, *, desc=""):
+    
+    def __init__(self, parent, comm, desc, *alias, has=''):
         self.comm = comm
         self.parent = parent
-        self.bot = parent.bot
-        self.subcommands = []
-        self.parent.subcommands.append(self)
+        self.has = has
+        self.subcommands = {}
+        parent.subcommands[comm] = self
+        for a in alias:
+            parent.subcommands[a] = self

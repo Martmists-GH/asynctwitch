@@ -107,9 +107,9 @@ class Bot:
     
     Parameters
     ----------
-    oauth : Required[str]
+    oauth : str
         The oauth code for your account
-    user : Required[str]
+    user : str
         Your username
     prefix : Optional[str]
         The prefix for the bot to listen to. (default: `!`)
@@ -133,7 +133,7 @@ class Bot:
         else:
             self.prefix = kwargs.get("prefix") or "!"
             self.oauth = kwargs.get("oauth")
-            self.nick = user.lower()
+            self.nick = kwargs.get("user").lower()
             channel = kwargs.get("channel") or "twitch"
             if isinstance(channel, str):
                 self.chan = ["#" + channel.lower().strip('#')]
@@ -160,7 +160,7 @@ class Bot:
         self.allow_streams = kwargs.get("allow_streams")
 
         # Just in case some get sent almost simultaneously even though they
-        # shouldn't
+        # shouldn't, limit the message count to max-1
         self.message_count = 1
 
         self.regex = {
@@ -207,9 +207,12 @@ class Bot:
 
     def load(self, path):
         """
-        .. method:: load(path)
+        Load settings from a config file.
         
-        :param: `path` - path to a config file
+        Parameters
+        ----------
+        path : str
+            path to the config file
 
         """
         config = configparser.ConfigParser(interpolation=None)
@@ -221,7 +224,16 @@ class Bot:
         self.client_id = config.get("Settings", "client_id", fallback=None)
 
     def override(self, coro):
-        """ Allows for overriding certain functions """
+        """
+        Decorator function to override events.
+
+        .. code-block:: python
+
+            @bot.override
+            async def event_message(message):
+                print(message.content)
+
+        """
         if 'event' not in coro.__name__:
             raise Exception(
                 "Accepted overrides start with 'event_' or 'raw_event'")
@@ -296,8 +308,11 @@ class Bot:
     def start(self, tasked=False):
         """
         Starts the bot.
-        This blocks all other code below it from executing,
-        unless `tasked` is set to True
+        
+        Parameters
+        ----------
+        tasked : Optional[bool]
+            Creates a task on the bot loop if True. (default: False)
         """
         if self.client_id is not None:
             self.loop.create_task(self._get_stats())
@@ -314,20 +329,28 @@ class Bot:
 
     @ratelimit_wrapper
     @asyncio.coroutine
-    def say(self, channel, *args):
-        """ Send messages """
-        msg = " ".join(str(arg) for arg in args)
+    def say(self, channel, message):
+        """
+        Send a message to the specified channel.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to send the message to.
+        message : str
+            The message to send.
+        """
 
-        if len(msg) > 500:
+        if len(message) > 500:
             raise Exception(
                 "The maximum amount of characters in one message is 500,"
                 " you tried to send {} characters".format(
-                    len(msg)))
+                    len(message)))
 
-        while msg.startswith("."):  # Use Bot.ban, Bot.timeout, etc instead
-            msg = msg[1:]
+        while message.startswith("."):  # Use Bot.ban, Bot.timeout, etc instead
+            message = message[1:]
 
-        yield from self._send_privmsg(channel, msg)
+        yield from self._send_privmsg(channel, message)
 
     @asyncio.coroutine
     def _nick(self):
@@ -345,9 +368,9 @@ class Bot:
         self.writer.write("JOIN {}\r\n".format(channel).encode('utf-8'))
 
     @asyncio.coroutine
-    def _part(self):
+    def _part(self, channel):
         """ Leave a channel """
-        self.writer.write("PART {}\r\n".format(self.chan).encode('utf-8'))
+        self.writer.write("PART #{}\r\n".format(channel).encode('utf-8'))
 
     @asyncio.coroutine
     def _special(self, mode):
@@ -374,105 +397,272 @@ class Bot:
     # TODO Commands:
     # /cheerbadge /commercial
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def ban(self, user, reason=''):
+        """
+        Ban a user.
+        
+        Parameters
+        ----------
+        user : :class:`User`
+            The user to ban.
+        reason : Optional[str]
+            The reason a user was banned.
+        """
         yield from self._send_privmsg(user.channel, ".ban {} {}".format(user.name, reason))
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def unban(self, user):
+        """
+        Unban a banned user
+        
+        Parameters
+        ----------
+        user : :class:`User`
+            The user to unban.
+        """
         yield from self._send_privmsg(user.channel, ".unban {}".format(user.name))
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def timeout(self, user, seconds=600, reason=''):
-        yield from self._send_privmsg(user.channel, ".timeout {} {} {}".format(user.name, seconds,
+        """
+        Timeout a user.
+        
+        Parameters
+        ----------
+        user : :class:`User`
+            The user to time out.
+        seconds : Optional[int]
+            The amount of seconds to timeout for.
+        reason : Optional[str]
+            The reason a user was timed out.
+        """
+        yield from self._send_privmsg(user.channel, ".timeout {} {} {}".format(
+                                                                 user.name, seconds,
                                                                  reason))
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def me(self, channel, text):
+        """
+        The /me command
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to use /me in.
+        text : str
+            The text to use in /me.
+        """
         yield from self._send_privmsg(channel, ".me {}".format(text))
 
-    @ratelimit_wrapper
     @asyncio.coroutine
-    def whisper(self, user, msg):
-        msg = str(msg)
+    @ratelimit_wrapper
+    def whisper(self, user, message):
+        """
+        Send a private message to a user
+        
+        Parameters
+        ----------
+        user : :class:`User`
+            The user to send a message to.
+        message : str
+            The message to send.
+        """
         yield from self._send_privmsg(user.channel, ".w {} {}".format(user.name, msg))
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def color(self, color):
-        yield from self._send_privmsg(random.choice(self.channel), ".color {}".format(color))
+        """
+        Change the bot's color
+        
+        Parameters
+        ----------
+        user : :class:`Color`
+            The color to use.
+        """
+        yield from self._send_privmsg(self.chan[0], ".color {}".format(color))
 
     @asyncio.coroutine
     def colour(self, colour):
+        """
+        See `bot.color`
+        """
         yield from self.color(colour)
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def mod(self, user):
+        """
+        Give moderator status to a user.
+        
+        Parameters
+        ----------
+        user : :class:`User`
+            The user to give moderator.
+        """
         yield from self._send_privmsg(user.channel, ".mod {}".format(user.name))
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def unmod(self, user):
+        """
+        Remove moderator status from a user.
+        
+        Parameters
+        ----------
+        user : :class:`User`
+            The user to remove moderator from.
+        """
         yield from self._send_privmsg(user.channel, ".unmod {}".format(user.name))
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def clear(self, channel):
+        """
+        Clear a channel.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to clear.
+        """
         yield from self._send_privmsg(channel, ".clear")
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def subscribers_on(self, channel):
+        """
+        Set channel mode to subscribers only.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to enable this on.
+        """
         yield from self._send_privmsg(channel, ".subscribers")
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def subscribers_off(self, channel):
+        """
+        Unset channel mode to subscribers only.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to disable this on.
+        """
         yield from self._send_privmsg(channel, ".subscribersoff")
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def slow_on(self, channel):
+        """
+        Set channel mode to slowmode.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to enable this on.
+        """
         yield from self._send_privmsg(channel, ".slow")
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def slow_off(self, channel):
+        """
+        Unset channel mode to slowmode.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to disable this on.
+        """
         yield from self._send_privmsg(channel, ".slowoff")
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def r9k_on(self, channel):
+        """
+        Set channel mode to r9k.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to enable this on.
+        """
         yield from self._send_privmsg(channel, ".r9k")
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def r9k_off(self, channel):
+        """
+        Unset channel mode to r9k.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to enable this on.
+        """
         yield from self._send_privmsg(channel, ".r9koff")
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def emote_only_on(self, channel):
+        """
+        Set channel mode to emote-only.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to enable this on.
+        """
         yield from self._send_privmsg(channel, ".emoteonly")
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def emote_only_off(self, channel):
+        """
+        Unset channel mode to emote-only.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to disable this on.
+        """
         yield from self._send_privmsg(channel, ".emoteonlyoff")
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def host(self, channel, user):
+        """
+        Start hosting a channel.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel that will be hosting.
+        user : str
+            The channel to host.
+        """
         yield from self._send_privmsg(channel, ".host {}".format(user))
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def unhost(self, channel):
+        """
+        Stop hosting a channel.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel that was hosting.
+        """
         yield from self._send_privmsg(channel, ".unhost")
 
     # End of Twitch commands
@@ -610,14 +800,14 @@ class Bot:
                         yield from self.event_userstate(User(self.nick, channel, tags))
 
                     elif action == "ROOMSTATE":
-                        yield from self.event_roomstate(tags)
+                        yield from self.event_roomstate(channel, tags)
 
                     elif action == "NOTICE":
-                        yield from self.event_notice(tags)
+                        yield from self.event_notice(channel, tags)
 
                     elif action == "CLEARCHAT":
                         if not content:
-                            yield from self.event_clear()
+                            yield from self.event_clear(channel)
                         else:
                             if "ban-duration" in tags.keys():
                                 yield from self.event_timeout(
@@ -628,13 +818,13 @@ class Bot:
 
                     elif action == "HOSTTARGET":
                         m = self.regex["host"].match(content)
-                        channel = m.group("channel")
+                        hchannel = m.group("channel")
                         viewers = m.group("count")
 
                         if channel == "-":
-                            yield from self.event_host_stop(viewers)
+                            yield from self.event_host_stop(channel, viewers)
                         else:
-                            yield from self.event_host_start(channel, viewers)
+                            yield from self.event_host_start(channel, hchannel, viewers)
 
                     elif action == "USERNOTICE":
                         message = content or ""
@@ -658,84 +848,114 @@ class Bot:
 
     @asyncio.coroutine
     def event_notice(self, tags):
-        """ Called on NOTICE events (when commands are called) """
+        """
+        Called on NOTICE events (when commands are called).
+        """
         pass
 
     @asyncio.coroutine
-    def event_clear(self):
-        """ Called when chat is cleared normally """
+    def event_clear(self, channel):
+        """
+        Called when chat is cleared by someone else.
+        """
         pass
 
     @asyncio.coroutine
     def event_subscribe(self, message, tags):
-        """ Called when someone (re-)subscribes. """
+        """
+        Called when someone (re-)subscribes.
+        """
         pass
 
     @asyncio.coroutine
-    def event_host_start(self, channel, viewercount):
-        """ Called when the streamer starts hosting. """
+    def event_host_start(self, channel, hosted_channel, viewer_count):
+        """
+        Called when the streamer starts hosting.
+        """
         pass
 
     @asyncio.coroutine
-    def event_host_stop(self, viewercount):
-        """ Called when the streamer stops hosting. """
+    def event_host_stop(self, channel, viewercount):
+        """
+        Called when the streamer stops hosting.
+        """
         pass
 
     @asyncio.coroutine
     def event_ban(self, user, tags):
-        """ Called when a user is banned. """
+        """
+        Called when a user is banned.
+        """
         pass
 
     @asyncio.coroutine
     def event_timeout(self, user, tags):
-        """ Called when a user is timed out. """
+        """
+        Called when a user is timed out.
+        """
         pass
 
     @asyncio.coroutine
     def event_roomstate(self, tags):
         """
-        Triggered when channel chat settings change.
+        Triggered when a channel's chat settings change.
         """
         pass
 
     @asyncio.coroutine
     def event_userstate(self, User):
-        """ Triggered when the bot sends a message. """
+        """
+        Triggered when the bot sends a message.
+        """
         pass
 
     @asyncio.coroutine
     def raw_event(self, data):
-        """ Called on all events after event_ready """
+        """
+        Called on all events after event_ready.
+        """
         pass
 
     @asyncio.coroutine
     def event_user_join(self, user):
-        """ Called when a user joins """
+        """
+        Called when a user joins a channel.
+        """
         pass
 
     @asyncio.coroutine
     def event_user_leave(self, user):
-        """ Called when a user leaves """
+        """
+        Called when a user leaves a channel.
+        """
         pass
 
     @asyncio.coroutine
     def event_user_deop(self, user):
-        """ Called when a user is de-opped """
+        """
+        Called when a user is de-opped.
+        """
         pass
 
     @asyncio.coroutine
     def event_user_op(self, user):
-        """ Called when a user is opped """
+        """
+        Called when a user is opped.
+        """
         pass
 
     @asyncio.coroutine
-    def event_private_message(self, rm):
-        """ Called on a private message """
+    def event_private_message(self, message):
+        """
+        Called when the bot receives a private message.
+        """
         pass
 
     @asyncio.coroutine
-    def event_message(self, rm):
-        """ Called when a message is sent """
+    def event_message(self, message):
+        """
+        Called when a message is sent by someone in chat.
+        """
         pass
 
     # End of events
@@ -743,7 +963,11 @@ class Bot:
     def stop(self, exit=False):
         """
         Stops the bot and disables using it again.
-        Useful for a restart command I guess
+        
+        Parameters
+        ----------
+        exit : Optional[bool]
+            If True, this will close the event loop and raise SystemExit. (default: False)
         """
 
         if hasattr(self, "player"):
@@ -762,18 +986,22 @@ class Bot:
         except:  # Can be ignored
             pass
 
-        self.loop.stop()
-
         if exit:
+            self.loop.stop()
             sys.exit(0)
 
     @asyncio.coroutine
     def play_file(self, file):
         """
-        Plays audio.
+        Plays an audio file
         For this to work, ffplay, ffmpeg and ffprobe are required.
         These are downloadable from the ffmpeg website,
         and have to be in the same folder as the bot OR added to path.
+        
+        Parameters
+        ----------
+        file : str
+            Filename of the file to play.
         """
         if self.song.is_playing:
             raise Exception("Already playing a song!")
@@ -801,18 +1029,30 @@ class Bot:
             asyncio.ensure_future(self.song._play(file))
 
     @asyncio.coroutine
-    def play_ytdl(self, query, *, filename="song.flac", options={}, play=True):
+    def play_ytdl(self, query, *, filename="song.mp3", options={}, play=True):
         """
-        Requires youtube_dl to be installed
+        Play a song using youtube_dl
+        
+        This requires youtube_dl to be installed
         `pip install youtube_dl`
+        
+        Parameters
+        ----------
+        query : str
+            The text to search for or the url to play
+        filename : Optional[str]
+            The temporary filename to use. This file will be removed once done playing. (default: "song.mp3")
+        options : Optional[dict]
+            The arguments to pass to the YoutubeDL constructor.
+        play : Optional[bool]
+            Automatically plays the song if True. If False, this will return a :class:`Song` object. (default: True)
         """
-
         import youtube_dl
 
         args = {
             "format": "bestaudio/best",
             "noplaylist": True,
-            "audioformat": "flac",
+            "audioformat": "mp3",
             "default_search": "auto",
             "noprogress": True,
             "outtmpl": filename
@@ -835,7 +1075,9 @@ class Bot:
 
     @asyncio.coroutine
     def parse_error(self, e):
-        """ Called when something errors """
+        """
+        Called when something errors.
+        """
 
         fname = e.__traceback__.tb_next.tb_frame.f_code.co_name
         print("Ignoring exception in {}:".format(fname))
@@ -843,7 +1085,9 @@ class Bot:
 
 
 class CommandBot(Bot):
-    """ Allows the usage of Commands more easily """
+    """
+    Allows the usage of Commands more easily
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -853,11 +1097,16 @@ class CommandBot(Bot):
 
     @asyncio.coroutine
     def event_message(self, m):
+        """
+        If you override this function, make sure to yield from/await `CommandBot.parse_commands`
+        """
         yield from self.parse_commands(m)
 
     @asyncio.coroutine
     def parse_commands(self, rm):
-        """ Shitty command parser I made """
+        """
+        The command parser. It is not recommended to override this.
+        """
 
         if self.nick == rm.author.name:
             return
@@ -886,24 +1135,27 @@ class CommandBot(Bot):
                     yield from self.commands[w].run(rm)
 
     def command(*args, **kwargs):
-        """ Add a command """
+        """
+        A decorator to add a command.
+        see :ref:`Command` for usage.
+        """
         return Command(*args, **kwargs)
 
-    def add_timer(self, message, time=60):
+    def add_timer(self, channel, message, time=60):
+        """
+        Send a message on a timer.
+        
+        Parameters
+        ----------
+        channel : str
+            The channel to send the message to.
+        message: str
+            The message to send.
+        time : Optional[int]
+            The interval to send the message. (default: 60)
+        """
         t = create_timer(message, time)
         self.loop.create_task(t(self))
-
-    @asyncio.coroutine
-    def play_list(self, l):
-        """ play songs from a list using play_ytdl """
-        # Broken
-
-        self.playlist = l
-        while self.playlist:
-            if not self.is_playing:
-                song = self.playlist.pop(0)
-                self.playing = song
-                yield from self.play_ytdl(song)
 
 
 class CurrencyBot(Bot):

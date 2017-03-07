@@ -9,6 +9,7 @@ Welcome to asynctwitch's documentation!
 Contents:
 
 .. toctree::
+   api.rst
    :maxdepth: 2
 
 
