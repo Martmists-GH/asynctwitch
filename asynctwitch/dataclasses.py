@@ -481,7 +481,7 @@ class Message:
 class Command:
     """ A command class to provide methods we can use with it """
 
-    def __init__(self, bot, comm, desc='', *alias, admin=False, unprefixed=False, listed=True, has=""):
+    def __init__(self, bot, comm, desc='', alias=[], admin=False, unprefixed=False, listed=True, has=""):
         self.comm = comm
         self.desc = desc
         self.alias = alias
