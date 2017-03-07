@@ -327,8 +327,8 @@ class Bot:
         """ Tell remote we're still alive """
         self.writer.write("PONG {}\r\n".format(src).encode('utf-8'))
 
-    @ratelimit_wrapper
     @asyncio.coroutine
+    @ratelimit_wrapper
     def say(self, channel, message):
         """
         Send a message to the specified channel.
@@ -448,7 +448,7 @@ class Bot:
     @ratelimit_wrapper
     def me(self, channel, text):
         """
-        The /me command
+        The /me command.
         
         Parameters
         ----------
