@@ -481,7 +481,7 @@ class Message:
 class Command:
     """ A command class to provide methods we can use with it """
 
-    def __init__(self, bot, comm, desc='', alias=[], admin=False, unprefixed=False, listed=True, has=""):
+    def __init__(self, bot, comm, desc='', alias=[], admin=False, unprefixed=False, listed=True):
         self.comm = comm
         self.desc = desc
         self.alias = alias
@@ -507,11 +507,6 @@ class Command:
     @asyncio.coroutine
     def run(self, message):
         """ Does type checking for command arguments """
-        if self.has != '':
-            if getattr(message.channel.permissions_for(message.author), self.has) is False and message.author.id not in self.cog.bot.admins:
-                yield from self.cog.bot.send_message(message.channel, "You do not have permission to use this command. Required permission: `{}`".format(self.has.replace("_", " ")))
-                return
-    
         args = message.content[len(self.cog.bot.prefix):].split(" ")[1:]
 
         args_name = inspect.getfullargspec(self.func)[0][1:]
