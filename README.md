@@ -30,7 +30,7 @@ bot = asynctwitch.CommandBot(
 # Example command:
 @bot.command('example', alias=['moreexample','anothaone'], desc='example command')
 async def example(message, word1:str, number1:int, rest:str):
-    bot.say('wow')
+    bot.say(message.channel.name, 'wow')
 
     
     
@@ -41,7 +41,7 @@ async def say(m, subcommand:str):
     
 @say.subcommand('this')
 async def this(m):
-    bot.say("that")
+    bot.say(m.channel.name, "that")
 
 bot.start() 
 ```
