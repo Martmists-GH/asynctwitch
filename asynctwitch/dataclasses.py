@@ -69,7 +69,7 @@ class Object:
 class Emote:
     """
     A class to hold emote data
-    
+
     Attributes
     ----------
     id : int
@@ -99,7 +99,7 @@ class Emote:
 class Badge:
     """
     A class to hold badge data.
-    
+
     Attributes
     ----------
     name : str
@@ -390,7 +390,7 @@ class Color:
 class Song:
     """
     Contains information about a song
-    
+
     Attributes
     ----------
     title : str
@@ -510,32 +510,32 @@ class Command:
         args = message.content[len(self.cog.bot.prefix):].split(" ")[1:]
 
         args_name = inspect.getfullargspec(self.func)[0][1:]
-        
+
         if len(args) > len(args_name):
             args[len(args_name)-1] = " ".join(args[len(args_name)-1:])
-            
+
             args = args[:len(args_name)]
-            
+
         ann = self.func.__annotations__
-        
+
         for x in range(0, len(args_name)):
             try:
                 v = args[x]
                 k = args_name[x]
-                
+
                 if not type(v) == ann[k]:
                     try:
                         v = ann[k](v)
-                        
-                    except Exception: 
+
+                    except Exception:
                         raise TypeError("Invalid type: got {}, {} expected"
                             .format(ann[k].__name__, v.__name__))
-                        
+
                 args[x] = v
             except IndexError:
                 break
-                
-        if len(list(self.subcommands.keys()))>0:
+
+        if len(list(self.subcommands.keys())) > 0:
             try:
                 subcomm = args.pop(0).split(" ")[0]
             except Exception:
@@ -546,10 +546,10 @@ class Command:
                 c.pop(1)
                 message.content = " ".join(c)
                 yield from self.subcommands[subcomm].run(message)
-            
+
             else:
                 yield from self.func(message, *args)
-            
+
         else:
             try:
                 yield from self.func(message, *args)
@@ -563,11 +563,10 @@ class Command:
 
 class SubCommand(Command):
     """ Subcommand class """
-    
-    def __init__(self, parent, comm, desc, *alias, has=''):
+
+    def __init__(self, parent, comm, desc, *alias):
         self.comm = comm
         self.parent = parent
-        self.has = has
         self.subcommands = {}
         parent.subcommands[comm] = self
         for a in alias:
