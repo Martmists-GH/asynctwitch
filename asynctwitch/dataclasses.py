@@ -489,6 +489,7 @@ class Command:
         self.listed = listed
         self.unprefixed = unprefixed
         self.subcommands = {}
+        self.bot = bot
         bot.commands[comm] = self
         for a in self.alias:
             bot.commands[a] = self
@@ -507,7 +508,7 @@ class Command:
     @asyncio.coroutine
     def run(self, message):
         """ Does type checking for command arguments """
-        args = message.content[len(self.cog.bot.prefix):].split(" ")[1:]
+        args = message.content[len(self.bot.prefix):].split(" ")[1:]
 
         args_name = inspect.getfullargspec(self.func)[0][1:]
 
