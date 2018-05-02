@@ -248,7 +248,7 @@ class Bot:
         global emotes
         emotes = (yield from _get_url(
             self.loop,
-            "https://twitchemotes.com/api_cache/v2/global.json"))['emotes']
+            "https://twitchemotes.com/api_cache/v3/global.json"))
 
         if not self.client_id:
             return
