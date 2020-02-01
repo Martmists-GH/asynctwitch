@@ -32,8 +32,7 @@ setup(
         'Programming Language :: Python :: 3.4',
     ],
     install_requires=[
-        'aiohttp',
-        'isodate'
+        'aiohttp', 'anyio'
     ],
     packages=find_packages(),
     keywords='asyncio twitch irc',
