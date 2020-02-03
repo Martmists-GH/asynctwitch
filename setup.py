@@ -1,10 +1,14 @@
-from setuptools import setup, find_packages
 from os import path
+
+from setuptools import setup, find_packages
 
 here = path.abspath(path.dirname(__file__))
 
 with open('README.rst') as f:
     long_description = f.read()
+
+with open("requirements.txt") as f:
+    REQUIREMENTS = f.readlines()
 
 setup(
     name='asynctwitch',
@@ -32,8 +36,12 @@ setup(
         'Programming Language :: Python :: 3.4',
     ],
     install_requires=[
-        'aiohttp', 'anyio'
+        REQUIREMENTS
     ],
+    extras_require={
+        "mysql": ["pymysql"],
+        "postgres": ["psycopg2"]
+    },
     packages=find_packages(),
     keywords='asyncio twitch irc',
 )

@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import re
-import sys
 import traceback
-from queue import Queue
 from typing import TYPE_CHECKING
 
-from anyio import run_in_thread, run, connect_tcp, TaskGroup, create_task_group, run_async_from_thread
+from anyio import run, connect_tcp, run_async_from_thread
 
+from asynctwitch.entities.channel_status import ChannelStatus
 from asynctwitch.entities.message import Message
 from asynctwitch.entities.user import User
 from asynctwitch.utils import ratelimit_wrapper
 
 if TYPE_CHECKING:
-    from typing import Optional, List
+    from typing import List
     from anyio import SocketStream
 
 
@@ -35,7 +34,11 @@ class BotBase:
         self._backend = backend
         self.username = username
         self.oauth_token = oauth
-        self.channels = channels
+        self.channels = [channel
+                         if channel.startswith("#")
+                         else "#" + channel
+                         for channel in channels]
+        self.channel_status = {}
         self._count = 1  # Used for ratelimits
         self.do_loop = True
 
@@ -51,13 +54,17 @@ class BotBase:
         if tasked:
             run_async_from_thread(self._tcp_echo_client)
         else:
-            run(self._tcp_echo_client, backend=self._backend)
+            try:
+                run(self._tcp_echo_client, backend=self._backend)
+            except KeyboardInterrupt:
+                pass
 
     def _send_all(self, data: str):
         """ shorthand for sending data """
-        return self._sock.send_all((data+"\r\n").encode('utf-8'))
+        raw = (data + "\r\n").encode('utf-8')
+        return self._sock.send_all(raw)
 
-    async def _pong(self, src):
+    async def _pong(self, src: str):
         """ Tell remote we're still alive """
         await self._send_all(f"PONG {src}")
 
@@ -95,11 +102,13 @@ class BotBase:
 
     async def _join(self, channel):
         """ Join a channel """
+        self.channel_status[channel] = ChannelStatus()
         await self._send_all(f"JOIN {channel}")
 
     async def _part(self, channel):
         """ Leave a channel """
-        await self._send_all("PART #{}".format(channel))
+        del self.channel_status[channel]
+        await self._send_all(f"PART {channel}")
 
     async def _special(self, mode: str):
         """ Allows for more events """
@@ -343,14 +352,18 @@ class BotBase:
     async def _tcp_echo_client(self):
         async with await connect_tcp("irc.chat.twitch.tv", 6667) as self._sock:
             if not self.username.startswith('justinfan'):
+                print("[AsyncTwitch] WARNING: User is a justinfan client, and will be unable to send messages!")
                 await self._pass()
             await self._nick()
             for m in ("commands", "tags", "membership"):
                 await self._special(m)
+            await self._join("#"+self.username)
             for c in self.channels:
                 await self._join(c)
 
-            MAX_SIZE = 2**16
+            await self.event_ready()
+
+            MAX_SIZE = 2 ** 16
 
             while self.do_loop:
                 raw_data = await self._sock.receive_until(b"\r\n", MAX_SIZE)
@@ -369,11 +382,12 @@ class BotBase:
                 m = p.match(decoded_data)
 
                 if m is None:
-                    print("Unable to find matching regex, discarded the following message:")
-                    print(decoded_data)
-                    continue
+                    all_groups = []
+                else:
+                    all_groups = [key
+                                  for key, value in m.groupdict().items()
+                                  if value is not None]
 
-                all_groups = m.groups()
                 if "tags" in all_groups:
                     _tags = m.group("tags")
 
@@ -452,9 +466,9 @@ class BotBase:
                     elif action == "USERSTATE":
 
                         if tags["mod"] == 1:
-                            self.is_mod = True
+                            self.channel_status[channel].is_mod = True
                         else:
-                            self.is_mod = False
+                            self.channel_status[channel].is_mod = False
 
                         await self.event_userstate(User(self.username, channel, tags))
 
@@ -473,10 +487,14 @@ class BotBase:
                             else:
                                 await self.event_ban(User(content, channel), tags)
 
+                    elif action == "CLEARMSG":
+                        sender = tags.pop("login")
+                        await self.event_delete_message(Message(content, sender, channel, {}))
+
                     elif action == "HOSTTARGET":
                         m = self.regex["host"].match(content)
                         hchannel = m.group("channel")
-                        viewers = m.group("count")
+                        viewers = int(m.group("count"))
 
                         if channel == "-":
                             await self.event_host_stop(channel, viewers)
@@ -498,7 +516,13 @@ class BotBase:
                         print(decoded_data)
 
                 except Exception as e:  # pylint: disable=broad-except flake8: noqa
-                    await self.parse_error(e)
+                    await self.on_error(e)
+
+    async def event_ready(self):
+        """
+        Called when ready to start reading data
+        """
+        await self._send_privmsg(self.username, "fetching client ID")
 
     async def event_notice(self, channel: str, tags: dict):
         """
@@ -512,7 +536,13 @@ class BotBase:
         """
         pass
 
-    async def event_subscribe(self, message: Message, tags: str):
+    async def event_delete_message(self, message: Message):
+        """
+        Called when a single message is deleted
+        """
+        pass
+
+    async def event_subscribe(self, message: Message, tags: dict):
         """
         Called when someone (re-)subscribes.
         """

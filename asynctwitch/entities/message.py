@@ -1,5 +1,6 @@
 import datetime
 import uuid
+from contextlib import suppress
 
 from asynctwitch.entities.object import Object
 from asynctwitch.entities.user import User
@@ -13,10 +14,9 @@ class Message(Object):
         super().__init__()
         if tags:
             self.raw_timestamp = tags['tmi-sent-ts']
-            self.timestamp = datetime.datetime.fromtimestamp(
-                int(tags['tmi-sent-ts']) / 1000)
+            self.timestamp = datetime.datetime.fromtimestamp(int(tags['tmi-sent-ts']) / 1000)
             self.emotes = _parse_emotes(tags['emotes'])
-            self.id = uuid.UUID(tags['id'])
+            self.id = uuid.UUID(tags.get('id') or tags.get("target-msg-id"))
             self.room_id = tags['room-id']
         self.content = m
         self.author = User(a, channel, tags)

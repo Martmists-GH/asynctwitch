@@ -1,22 +1,23 @@
 import asyncio
-import traceback
-import sys
-import os
-import re
-import math
-import json
 import configparser
-import time
-import subprocess
 import functools
-import sqlite3
+import json
+import math
+import os
 import pathlib
+import re
+import sqlite3
+import subprocess
+import sys
+import time
+import traceback
 
 from .dataclasses import Command, Message, User, Song
 
 # Test if they have aiohttp installed in case they didn't use setup.py
 try:
     import aiohttp
+
     aio_installed = True
 except ImportError:
     print("To use stats from the API, make sure to install aiohttp. "
@@ -33,6 +34,7 @@ def db_setup(func):  # easy wrapper for setring up databases
         func(c)
         con.commit()
         con.close()
+
     return inner
 
 
@@ -82,6 +84,7 @@ def create_timer(message, channel, time):
         while True:
             yield from asyncio.sleep(time)
             yield from self.say(channel, message)
+
     return wrapper
 
 
@@ -98,6 +101,7 @@ def ratelimit_wrapper(coro):
         # make sure it doesn't block the event loop
         self.loop.call_later(20, _decrease_msgcount, self)
         return r
+
     return wrapper
 
 
@@ -188,7 +192,7 @@ class Bot:
 
         self.messages = []
         self.channel_moderators = {}
-            
+
         for c in self.chan:
             self.channel_stats[c] = {}
 
@@ -259,7 +263,7 @@ class Bot:
                     j = yield from _get_url(
                         self.loop,
                         'https://api.twitch.tv/kraken/channels/{}?client_id={}'
-                        .format(c[1:], self.client_id))
+                            .format(c[1:], self.client_id))
                     self.channel_stats[c] = {
                         'mature': j['mature'],
                         'title': j['status'],
@@ -284,14 +288,14 @@ class Bot:
                     j = yield from _get_url(
                         self.loop,
                         'https://tmi.twitch.tv/hosts?target={}&include_logins=1'
-                        .format(j['_id']))
+                            .format(j['_id']))
                     self.host_count[c] = len(j['hosts'])
                     self.hosts[c] = [x['host_login'] for x in j['hosts']]
 
                     j = yield from _get_url(
                         self.loop,
                         'https://tmi.twitch.tv/group/user/{}/chatters'
-                        .format(c[1:]))
+                            .format(c[1:]))
                     self.viewer_count[c] = j['chatter_count']
                     self.channel_moderators[c] = j['chatters']['moderators']
                     self.viewers[c]['viewers'] = j['chatters']['viewers']
@@ -441,8 +445,8 @@ class Bot:
             The reason a user was timed out.
         """
         yield from self._send_privmsg(user.channel, ".timeout {} {} {}".format(
-                                                                 user.name, seconds,
-                                                                 reason))
+            user.name, seconds,
+            reason))
 
     @asyncio.coroutine
     @ratelimit_wrapper
@@ -1121,7 +1125,7 @@ class CommandBot(Bot):
             if w in self.commands:
                 if not self.commands[w].unprefixed:
                     if self.commands[
-                            w].admin and rm.author.name not in self.admins:
+                        w].admin and rm.author.name not in self.admins:
                         yield from self.say(
                             "You are not allowed to use this command")
                     yield from self.commands[w].run(rm)
