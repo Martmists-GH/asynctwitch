@@ -1,32 +1,37 @@
+# Stdlib
+from uuid import uuid4
+
+# Asynctwitch
+# Snekchek
 import asynctwitch as at
+from asynctwitch.entities.message import Message
+from asynctwitch.ext.db.sqlite import SQLiteDB
 
 
-class Bot(at.CommandBot, at.RankedBot):
-	pass
+class Compound(at.ChatLogBot, at.DatabaseBot[SQLiteDB], at.JoinRequestBot,
+               at.TimerBot):
+    def __init__(self, **kwargs):
+        async def say_hi():
+            print("hi")
+
+        kwargs["timers"] = [(120, say_hi())]
+
+        super().__init__(**kwargs)
+
+    async def event_ready(self):
+        await super().event_ready()
+        await self.query(
+            "CREATE TABLE IF NOT EXISTS messages "
+            "(id VARCHAR(32) PRIMARY KEY, channel VARCHAR(32), user VARCHAR(32), message TEXT)",
+            ())
+
+    async def event_message(self, message: Message):
+        await super().event_message(message)
+        await self.query("INSERT INTO messages VALUES (?, ?, ?, ?)",
+                         (uuid4().hex, message.channel, message.author.name,
+                          message.content))
 
 
-bot = Bot(
-    user='justinfan100'  # read-only client
-)
-
-
-@bot.command("test", desc="Some test command")
-async def test(m, arg1:int):
-	pass
-
-
-bot.add_rank("test rank", points=10)
-
-
-@bot.override
-async def raw_event(data):
-    print(data)
-
-
-@bot.override
-async def event_roomstate(channel, tags):
-    bot.stop(exit=True)
-    print('Failed to exit!')
-
+bot = Compound(channels=["bobross"])
 
 bot.start()

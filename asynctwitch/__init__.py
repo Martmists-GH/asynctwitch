@@ -1,6 +1,7 @@
-from .dataclasses import Badge, Emote, Color,\
-    Command, SubCommand, Message, User, Song, Object
-from .bots import Bot, CommandBot, CurrencyBot,\
-    ViewTimeBot, RankedBot
+# Asynctwitch
+from asynctwitch.bots import BotBase, TimerBot, ChatLogBot, DatabaseBot, JoinRequestBot
+from asynctwitch.entities import User, Badge, Emote, Object, Message, ChannelStatus
 
-Colour = Color
+__all__ = ("BotBase", "ChatLogBot", "DatabaseBot", "JoinRequestBot",
+           "TimerBot", "Badge", "Emote", "Message", "Object", "User",
+           "ChannelStatus")

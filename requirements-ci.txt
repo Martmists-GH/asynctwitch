@@ -1,0 +1,29 @@
+# main
+snekchek
+
+# lint
+flake8
+flake8-import-order
+flake8-todo
+flake8-requirements
+flake8-string-format
+flake8-bandit
+pylint
+vulture
+
+# format
+isort
+yapf
+
+# security
+safety
+dodgy
+
+# testing
+pytest
+pytest-json
+
+# upload to pypi
+requests
+wheel
+twine

@@ -1,0 +1,22 @@
+dist: xenial
+
+language: python
+
+python:
+  - "3.7"
+  - "3.8"
+  # - "3.9"
+
+install:
+  - "pip install -r requirements.txt"
+  - "pip install -r requirements-ci.txt"
+
+script:
+  # ignore output from install
+  - python setup.py install > /dev/null
+  - snekchek
+
+cache: pip
+
+notifications:
+  email: false
