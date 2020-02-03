@@ -5,7 +5,17 @@ from asynctwitch.entities.message import Message
 from asynctwitch.ext.db.sqlite import SQLiteDB
 
 
-class Compound(at.ChatLogBot, at.DatabaseBot[SQLiteDB], at.JoinRequestBot):
+class Compound(at.ChatLogBot, at.DatabaseBot[SQLiteDB], at.JoinRequestBot, at.TimerBot):
+    def __init__(self, **kwargs):
+        async def say_hi():
+            print("hi")
+
+        kwargs["timers"] = [(
+            120, say_hi()
+        )]
+
+        super().__init__(**kwargs)
+
     async def event_ready(self):
         await super().event_ready()
         await self.query("CREATE TABLE IF NOT EXISTS messages "

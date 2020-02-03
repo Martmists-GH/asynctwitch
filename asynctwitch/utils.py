@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import time
 from functools import wraps
+from threading import Thread
 from typing import TYPE_CHECKING
 
 import anyio
@@ -19,14 +21,19 @@ def ratelimit_wrapper(coro: Callable[[Any, ...], Coroutine]) -> Callable[[Any, .
 
     @wraps(coro)
     async def wrapper(self: BotBase, *args, **kwargs):
-        _max = 100 if all(status.is_mod for status in self.channel_status) else 20
+        _max = 100 if all(status.is_mod for status in self.channel_status.values()) else 20
 
         while self._count == _max:
             await anyio.sleep(1)
 
         self._count += 1
         r = await coro(self, *args, **kwargs)
-        self.loop.call_later(20, decrease)
+
+        def decrease_after_20():
+            time.sleep(20)
+            decrease(self)
+        Thread(target=decrease_after_20).start()
+
         return r
 
     return wrapper

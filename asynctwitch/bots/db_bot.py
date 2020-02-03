@@ -1,4 +1,4 @@
-from typing import Tuple, Any
+from typing import Tuple, Any, List
 
 from asynctwitch.bots.base import BotBase
 from asynctwitch.ext.db.base_db import BaseDB
@@ -29,7 +29,8 @@ class DatabaseBot(BotBase, metaclass=IndexDBMeta):
               "For optimal performance, reimplement these using your async library of choice.")
 
     async def event_ready(self):
+        await super().event_ready()
         await self.database.post_init(*self._db_args)
 
-    async def query(self, query: str, args: Tuple[Any, ...]) -> Tuple[Any, ...]:
+    async def query(self, query: str, args: Tuple[Any, ...]) -> List[Tuple[Any, ...]]:
         return await self.database.query(query, args)

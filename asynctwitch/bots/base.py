@@ -4,7 +4,7 @@ import re
 import traceback
 from typing import TYPE_CHECKING
 
-from anyio import run, connect_tcp, run_async_from_thread
+from anyio import run, connect_tcp, run_async_from_thread, create_task_group
 
 from asynctwitch.entities.channel_status import ChannelStatus
 from asynctwitch.entities.message import Message
@@ -13,7 +13,7 @@ from asynctwitch.utils import ratelimit_wrapper
 
 if TYPE_CHECKING:
     from typing import List
-    from anyio import SocketStream
+    from anyio import SocketStream, TaskGroup
 
 
 class BotBase:
@@ -31,6 +31,7 @@ class BotBase:
     def __init__(self, *, username: str = "justinfan100", oauth: str = "",
                  backend: str = "asyncio", channels: List[str] = None):
         self._sock: SocketStream = None
+        self._task_group: TaskGroup = None
         self._backend = backend
         self.username = username
         self.oauth_token = oauth
@@ -42,22 +43,13 @@ class BotBase:
         self._count = 1  # Used for ratelimits
         self.do_loop = True
 
-    def start(self, tasked: bool = False):
-        """ Start the bot
+    def start(self):
+        """ Start the bot """
+        run(self.run, backend=self._backend)
 
-        Parameters
-        ----------
-        tasked : bool
-            If true, runs the bot in a separate thread
-        """
-
-        if tasked:
-            run_async_from_thread(self._tcp_echo_client)
-        else:
-            try:
-                run(self._tcp_echo_client, backend=self._backend)
-            except KeyboardInterrupt:
-                pass
+    async def run(self):
+        async with create_task_group() as self._task_group:
+            await self._task_group.spawn(self._tcp_echo_client)
 
     def _send_all(self, data: str):
         """ shorthand for sending data """
@@ -643,3 +635,4 @@ class BotBase:
         """
 
         self.do_loop = False
+        await self._task_group.cancel_scope.cancel()
