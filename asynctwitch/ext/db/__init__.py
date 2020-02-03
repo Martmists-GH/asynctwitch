@@ -1,5 +1,10 @@
+# pylint: disable
+# flake8: noqa
+
+# Stdlib
 from contextlib import suppress
 
+# Asynctwitch
 from asynctwitch.ext.db.base_db import BaseDB
 
 all_list = ["BaseDB", "SQLiteDB"]

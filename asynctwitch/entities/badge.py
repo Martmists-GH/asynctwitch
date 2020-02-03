@@ -1,3 +1,4 @@
+# Asynctwitch
 from asynctwitch.entities.object import Object
 
 
@@ -12,7 +13,6 @@ class Badge(Object):
     value : str
         Variant of the badge.
     """
-
     def __init__(self, name: str, value: str):
         super().__init__()
         self.name = name

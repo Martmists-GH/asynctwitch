@@ -1,13 +1,18 @@
-from threading import Thread
-from typing import Coroutine, Tuple, List
+# Stdlib
+from typing import List, Tuple, Coroutine
 
-from anyio import sleep, run_async_from_thread
+# External Libraries
+from anyio import sleep
 
+# Asynctwitch
 from asynctwitch.bots.base import BotBase
 
 
 class TimerBot(BotBase):
-    def __init__(self, *, timers: List[Tuple[int, Coroutine]] = None, **kwargs):
+    def __init__(self,
+                 *,
+                 timers: List[Tuple[int, Coroutine]] = None,
+                 **kwargs):
         super().__init__(**kwargs)
         self._timers = timers or []
 

@@ -1,3 +1,4 @@
+# Asynctwitch
 from asynctwitch.entities.object import Object
 from asynctwitch.mappings import EmoteMapping
 
@@ -15,7 +16,6 @@ class Emote(Object):
     url : str
         The url of the emote.
     """
-
     def __init__(self, _id: str, loc: str):
         super().__init__()
         self.id = _id

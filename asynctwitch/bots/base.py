@@ -1,11 +1,15 @@
+# __future__ imports
 from __future__ import annotations
 
+# Stdlib
 import re
 import traceback
 from typing import TYPE_CHECKING
 
-from anyio import run, connect_tcp, run_async_from_thread, create_task_group
+# External Libraries
+from anyio import run, connect_tcp, create_task_group
 
+# Asynctwitch
 from asynctwitch.entities.channel_status import ChannelStatus
 from asynctwitch.entities.message import Message
 from asynctwitch.entities.user import User
@@ -13,32 +17,39 @@ from asynctwitch.utils import ratelimit_wrapper
 
 if TYPE_CHECKING:
     from typing import List
-    from anyio import SocketStream, TaskGroup
+    from anyio import SocketStream, TaskGroup  # pylint: disable=ungrouped-imports
 
 
 class BotBase:
     regex = {
-        "data": re.compile(
-            r"^(?:@(?P<tags>\S+)\s)?:(?P<data>\S+)\s(?P<action>[A-Z]+)"
-            r"(?:\s#)(?P<channel>\S+)(?:\s(?::)?(?P<content>.+))?"
-        ),
-        "ping": re.compile("PING (?P<content>.+)"),
-        "author": re.compile(r"(?P<author>[^!]+)!(?P=author)@(?P=author).tmi.twitch.tv"),
-        "mode": re.compile(r"(?P<mode>[+\-])o (?P<user>.+)"),
-        "host": re.compile(r"(?P<channel>[\S_]+) (?P<count>[\d\-]+)")
+        "data":
+        re.compile(r"^(?:@(?P<tags>\S+)\s)?:(?P<data>\S+)\s(?P<action>[A-Z]+)"
+                   r"(?:\s#)(?P<channel>\S+)(?:\s(?::)?(?P<content>.+))?"),
+        "ping":
+        re.compile("PING (?P<content>.+)"),
+        "author":
+        re.compile(r"(?P<author>[^!]+)!(?P=author)@(?P=author).tmi.twitch.tv"),
+        "mode":
+        re.compile(r"(?P<mode>[+\-])o (?P<user>.+)"),
+        "host":
+        re.compile(r"(?P<channel>[\S_]+) (?P<count>[\d\-]+)")
     }
 
-    def __init__(self, *, username: str = "justinfan100", oauth: str = "",
-                 backend: str = "asyncio", channels: List[str] = None):
+    def __init__(self,
+                 *,
+                 username: str = "justinfan100",
+                 oauth: str = "",
+                 backend: str = "asyncio",
+                 channels: List[str] = None):
         self._sock: SocketStream = None
         self._task_group: TaskGroup = None
         self._backend = backend
         self.username = username
         self.oauth_token = oauth
-        self.channels = [channel
-                         if channel.startswith("#")
-                         else "#" + channel
-                         for channel in channels]
+        self.channels = [
+            channel if channel.startswith("#") else "#" + channel
+            for channel in channels
+        ]
         self.channel_status = {}
         self._count = 1  # Used for ratelimits
         self.do_loop = True
@@ -76,8 +87,7 @@ class BotBase:
         if len(message) > 500:
             raise Exception(
                 "The maximum amount of characters in one message is 500,"
-                " you tried to send {} characters".format(
-                    len(message)))
+                f" you tried to send {len(message)} characters")
 
         while message.startswith("."):  # Use Bot.ban, Bot.timeout, etc instead
             message = message[1:]
@@ -88,9 +98,9 @@ class BotBase:
         """ Send name """
         await self._send_all(f"NICK {self.username}")
 
-    async def _pass(self):
+    async def _(self):
         """ Send oauth token """
-        await self._send_all(f"PASS {self.oauth_token}")
+        await self._send_all(f" {self.oauth_token}")
 
     async def _join(self, channel):
         """ Join a channel """
@@ -155,7 +165,8 @@ class BotBase:
         reason : Optional[str]
             The reason a user was timed out.
         """
-        await self._send_privmsg(user.channel, f".timeout {user.name} {seconds} {reason}")
+        await self._send_privmsg(user.channel,
+                                 f".timeout {user.name} {seconds} {reason}")
 
     async def me(self, channel: str, text: str):
         """
@@ -344,18 +355,19 @@ class BotBase:
     async def _tcp_echo_client(self):
         async with await connect_tcp("irc.chat.twitch.tv", 6667) as self._sock:
             if not self.username.startswith('justinfan'):
-                print("[AsyncTwitch] WARNING: User is a justinfan client, and will be unable to send messages!")
-                await self._pass()
+                print("[AsyncTwitch] WARNING: User is a justinfan client, "
+                      "and will be unable to send messages!")
+                await self._()
             await self._nick()
             for m in ("commands", "tags", "membership"):
                 await self._special(m)
-            await self._join("#"+self.username)
+            await self._join("#" + self.username)
             for c in self.channels:
                 await self._join(c)
 
             await self.event_ready()
 
-            MAX_SIZE = 2 ** 16
+            MAX_SIZE = 2**16
 
             while self.do_loop:
                 raw_data = await self._sock.receive_until(b"\r\n", MAX_SIZE)
@@ -376,9 +388,10 @@ class BotBase:
                 if m is None:
                     all_groups = []
                 else:
-                    all_groups = [key
-                                  for key, value in m.groupdict().items()
-                                  if value is not None]
+                    all_groups = [
+                        key for key, value in m.groupdict().items()
+                        if value is not None
+                    ]
 
                 if "tags" in all_groups:
                     _tags = m.group("tags")
@@ -421,26 +434,30 @@ class BotBase:
                         await self._pong(content)
 
                     elif action == "PRIVMSG":
-                        sender = self.regex["author"].match(data).group("author")
+                        sender = self.regex["author"].match(data).group(
+                            "author")
 
                         message_obj = Message(content, sender, channel, tags)
 
                         await self.event_message(message_obj)
 
                     elif action == "WHISPER":
-                        sender = self.regex["author"].match(data).group("author")
+                        sender = self.regex["author"].match(data).group(
+                            "author")
 
                         message_obj = Message(content, sender, channel, tags)
 
                         await self.event_private_message(message_obj)
 
                     elif action == "JOIN":
-                        sender = self.regex["author"].match(data).group("author")
+                        sender = self.regex["author"].match(data).group(
+                            "author")
 
                         await self.event_user_join(User(sender, channel))
 
                     elif action == "PART":
-                        sender = self.regex["author"].match(data).group("author")
+                        sender = self.regex["author"].match(data).group(
+                            "author")
 
                         await self.event_user_leave(User(sender, channel))
 
@@ -462,7 +479,8 @@ class BotBase:
                         else:
                             self.channel_status[channel].is_mod = False
 
-                        await self.event_userstate(User(self.username, channel, tags))
+                        await self.event_userstate(
+                            User(self.username, channel, tags))
 
                     elif action == "ROOMSTATE":
                         await self.event_roomstate(channel, tags)
@@ -475,13 +493,16 @@ class BotBase:
                             await self.event_clear(channel)
                         else:
                             if "ban-duration" in tags.keys():
-                                await self.event_timeout(User(content, channel), tags)
+                                await self.event_timeout(
+                                    User(content, channel), tags)
                             else:
-                                await self.event_ban(User(content, channel), tags)
+                                await self.event_ban(User(content, channel),
+                                                     tags)
 
                     elif action == "CLEARMSG":
                         sender = tags.pop("login")
-                        await self.event_delete_message(Message(content, sender, channel, {}))
+                        await self.event_delete_message(
+                            Message(content, sender, channel, {}))
 
                     elif action == "HOSTTARGET":
                         m = self.regex["host"].match(content)
@@ -491,13 +512,15 @@ class BotBase:
                         if channel == "-":
                             await self.event_host_stop(channel, viewers)
                         else:
-                            await self.event_host_start(channel, hchannel, viewers)
+                            await self.event_host_start(
+                                channel, hchannel, viewers)
 
                     elif action == "USERNOTICE":
                         message = content or ""
                         user = tags["login"]
 
-                        await self.event_subscribe(Message(message, user, channel, tags), tags)
+                        await self.event_subscribe(
+                            Message(message, user, channel, tags), tags)
 
                     elif action == "CAP":
                         # We don"t need this for anything, so just ignore it
@@ -507,7 +530,7 @@ class BotBase:
                         print("Unknown event:", action)
                         print(decoded_data)
 
-                except Exception as e:  # pylint: disable=broad-except flake8: noqa
+                except Exception as e:  # pylint: disable=broad-except; flake8: noqa
                     await self.on_error(e)
 
     async def event_ready(self):
@@ -520,105 +543,89 @@ class BotBase:
         """
         Called on NOTICE events (when commands are called).
         """
-        pass
 
     async def event_clear(self, channel: str):
         """
         Called when chat is cleared by someone else.
         """
-        pass
 
     async def event_delete_message(self, message: Message):
         """
         Called when a single message is deleted
         """
-        pass
 
     async def event_subscribe(self, message: Message, tags: dict):
         """
         Called when someone (re-)subscribes.
         """
-        pass
 
-    async def event_host_start(self, channel: str, hosted_channel: str, viewer_count: int):
+    async def event_host_start(self, channel: str, hosted_channel: str,
+                               viewer_count: int):
         """
         Called when the streamer starts hosting.
         """
-        pass
 
     async def event_host_stop(self, channel: str, viewercount: int):
         """
         Called when the streamer stops hosting.
         """
-        pass
 
     async def event_ban(self, user: User, tags: dict):
         """
         Called when a user is banned.
         """
-        pass
 
     async def event_timeout(self, user: User, tags: dict):
         """
         Called when a user is timed out.
         """
-        pass
 
     async def event_roomstate(self, channel: str, tags: dict):
         """
         Triggered when a channel's chat settings change.
         """
-        pass
 
     async def event_userstate(self, user: User):
         """
         Triggered when the bot sends a message.
         """
-        pass
 
     async def raw_event(self, data: str):
         """
         Called on all events after event_ready.
         """
-        pass
 
     async def event_user_join(self, user: User):
         """
         Called when a user joins a channel.
         """
-        pass
 
     async def event_user_leave(self, user: User):
         """
         Called when a user leaves a channel.
         """
-        pass
 
     async def event_user_deop(self, user: User):
         """
         Called when a user is de-opped.
         """
-        pass
 
     async def event_user_op(self, user: User):
         """
         Called when a user is opped.
         """
-        pass
 
     async def event_private_message(self, message: Message):
         """
         Called when the bot receives a private message.
         """
-        pass
 
     async def event_message(self, message: Message):
         """
         Called when a message is sent by someone in chat.
         """
-        pass
 
-    async def on_error(self, error: Exception):
+    async def on_error(self, error: Exception):  # pylint: disable=unused-argument
         print("An error occured!")
         traceback.print_exc()
 

@@ -1,8 +1,11 @@
+# __future__ imports
 from __future__ import annotations
 
+# Stdlib
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
+# Asynctwitch
 from asynctwitch.entities.badge import Badge
 from asynctwitch.entities.object import Object
 from asynctwitch.utils import _parse_badges
@@ -12,7 +15,11 @@ if TYPE_CHECKING:
 
 
 class User(Object):
-    def __init__(self, name: str, channel: str, tags: Dict[str, Union[str, int]] = None):
+    def __init__(self,
+                 name: str,
+                 channel: str,
+                 tags: Dict[str, Union[str, int]] = None):
+        # TODO: Refactor
         super().__init__()
         self.name = name
         self.channel = channel
